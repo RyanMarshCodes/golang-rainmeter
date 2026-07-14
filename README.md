@@ -38,15 +38,24 @@ Copy-Item config\config.example.yml config\config.yml
 go run ./cmd/rmgo
 ```
 
-Build a binary instead:
+### Build and run (tray / double-click)
+
+`go run` is fine for development. For day-to-day use, build a GUI binary (no console window) and launch it like a normal app:
 
 ```powershell
 $env:CGO_ENABLED = "1"
-go build -o rmgo.exe ./cmd/rmgo
-.\rmgo.exe
+# -H windowsgui = no black console; app lives in the system tray
+go build -ldflags="-H windowsgui" -o rmgo.exe ./cmd/rmgo
 ```
 
-Optional: pass a config path as the first argument (`.\rmgo.exe path\to\config.yml`).
+Then either:
+
+- Double-click `rmgo.exe` in Explorer, or
+- Pin it / shortcut to Startup if you want it at login
+
+Look for the **rmgo** tray icon (notification area). Right-click for reload, edit mode, widget toggles, and Quit. Logs from `log.Printf` will not appear in a terminal with the GUI build — use a normal `go build` (omit `-H windowsgui`) when you need console output while debugging.
+
+Keep `config\config.yml` (and `assets\`) next to the exe, or run from the repo root so those paths resolve. Optional: pass a config path as the first argument (`.\rmgo.exe path\to\config.yml`).
 
 ## Config
 
