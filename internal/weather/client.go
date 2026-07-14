@@ -53,6 +53,9 @@ type Day struct {
 	Label   string // Mon / Tue / …
 	HighC   float64
 	LowC    float64
+	Sunrise time.Time
+	Sunset  time.Time
+	SunOK   bool
 	Code    int
 	Icon    string
 	Cond    string
@@ -152,7 +155,7 @@ func (c *Client) forecast(lat, lon float64, place, query string, units Units) (S
 	q.Set("latitude", fmt.Sprintf("%f", lat))
 	q.Set("longitude", fmt.Sprintf("%f", lon))
 	q.Set("current", "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m")
-	q.Set("daily", "weather_code,temperature_2m_max,temperature_2m_min")
+	q.Set("daily", "weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset")
 	q.Set("timezone", "auto")
 	q.Set("forecast_days", "4")
 	if units == UnitsC {
@@ -173,10 +176,12 @@ func (c *Client) forecast(lat, lon float64, place, query string, units Units) (S
 			WindDir  int     `json:"wind_direction_10m"`
 		} `json:"current"`
 		Daily struct {
-			Time []string  `json:"time"`
-			Code []int     `json:"weather_code"`
-			High []float64 `json:"temperature_2m_max"`
-			Low  []float64 `json:"temperature_2m_min"`
+			Time    []string  `json:"time"`
+			Code    []int     `json:"weather_code"`
+			High    []float64 `json:"temperature_2m_max"`
+			Low     []float64 `json:"temperature_2m_min"`
+			Sunrise []string  `json:"sunrise"`
+			Sunset  []string  `json:"sunset"`
 		} `json:"daily"`
 	}
 	if err := getJSON(c.http, forecastURL+"?"+q.Encode(), &raw); err != nil {
@@ -223,14 +228,19 @@ func (c *Client) forecast(lat, lon float64, place, query string, units Units) (S
 			low = raw.Daily.Low[i]
 		}
 		cond, ic := Describe(code)
+		sunrise, sunOK := parseSunTime(raw.Daily.Sunrise, i)
+		sunset, setOK := parseSunTime(raw.Daily.Sunset, i)
 		snap.Forecast = append(snap.Forecast, Day{
-			Date:  t,
-			Label: dayLabel(t),
-			HighC: high,
-			LowC:  low,
-			Code:  code,
-			Icon:  ic,
-			Cond:  cond,
+			Date:    t,
+			Label:   dayLabel(t),
+			HighC:   high,
+			LowC:    low,
+			Sunrise: sunrise,
+			Sunset:  sunset,
+			SunOK:   sunOK && setOK,
+			Code:    code,
+			Icon:    ic,
+			Cond:    cond,
 		})
 	}
 	return snap, nil
@@ -240,14 +250,34 @@ func dayLabel(t time.Time) string {
 	return t.Weekday().String()[:3]
 }
 
+func parseSunTime(times []string, i int) (time.Time, bool) {
+	if i >= len(times) {
+		return time.Time{}, false
+	}
+	raw := strings.TrimSpace(times[i])
+	if raw == "" {
+		return time.Time{}, false
+	}
+	for _, layout := range []string{
+		"2006-01-02T15:04:05",
+		"2006-01-02T15:04",
+		time.RFC3339,
+	} {
+		if t, err := time.ParseInLocation(layout, raw, time.Local); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
 func looksUSZIP(s string) bool {
 	if len(s) == 5 {
 		_, err := strconv.Atoi(s)
 		return err == nil
 	}
-	if len(s) == 10 && s[5] == '-' {
-		_, e1 := strconv.Atoi(s[:5])
-		_, e2 := strconv.Atoi(s[6:])
+	if prefix, suffix, ok := strings.Cut(s, "-"); ok && len(prefix) == 5 && len(suffix) == 4 {
+		_, e1 := strconv.Atoi(prefix)
+		_, e2 := strconv.Atoi(suffix)
 		return e1 == nil && e2 == nil
 	}
 	return false

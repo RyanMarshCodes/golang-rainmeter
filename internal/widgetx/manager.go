@@ -138,10 +138,34 @@ func (m *Manager) Reconcile(cfg *config.Config) {
 	m.mu.Unlock()
 
 	host := shell.Window()
+	designW := cfg.Shell.DesignWidth
+	if designW <= 0 {
+		if cfg.Shell.Width > 0 {
+			designW = cfg.Shell.Width
+		} else {
+			designW = DefaultDesignWidth
+		}
+	}
+	designH := cfg.Shell.DesignHeight
+	if designH <= 0 {
+		if cfg.Shell.Height > 0 {
+			designH = cfg.Shell.Height
+		} else {
+			designH = DefaultDesignHeight
+		}
+	}
+
 	for id, wcfg := range desired {
 		applyCfg := wcfg
 		applyCfg.AssetsDir = assetsDir
 		applyCfg.EditMode = editMode
+		applyCfg.DesignWidth = designW
+		applyCfg.DesignHeight = designH
+		bandH := wcfg.Height
+		if bandH <= 0 {
+			bandH = designH
+		}
+		applyCfg.DesignBandHeight = bandH
 
 		m.mu.Lock()
 		inst, exists := m.instances[id]
@@ -198,7 +222,8 @@ func (m *Manager) Reconcile(cfg *config.Config) {
 		}
 		objs = append(objs, inst.Content())
 		weights = append(weights, inst.FlexWeight())
-		mins = append(mins, inst.MinSize())
+		min := inst.MinSize()
+		mins = append(mins, fyne.NewSize(min.Width, inst.FlexWeight()))
 	}
 	m.mu.Unlock()
 
@@ -211,14 +236,14 @@ func (m *Manager) Reconcile(cfg *config.Config) {
 func (m *Manager) CloseAll() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for id, cancel := range m.cancels {
+	for _, cancel := range m.cancels {
 		cancel()
-		delete(m.cancels, id)
 	}
-	for id, inst := range m.instances {
+	clear(m.cancels)
+	for _, inst := range m.instances {
 		inst.Close()
-		delete(m.instances, id)
 	}
+	clear(m.instances)
 	if m.shell != nil {
 		m.shell.Close()
 		m.shell = nil

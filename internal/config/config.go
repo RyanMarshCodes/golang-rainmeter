@@ -3,8 +3,10 @@ package config
 import (
 	"bytes"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +28,8 @@ type ShellConfig struct {
 	Y            int      `yaml:"y,omitempty"`
 	Width        float32  `yaml:"width,omitempty"`
 	Height       float32  `yaml:"height,omitempty"`
+	DesignWidth  float32  `yaml:"design_width,omitempty"`  // rem reference; not updated by edit-mode geometry save
+	DesignHeight float32  `yaml:"design_height,omitempty"` // rem reference; not updated by edit-mode geometry save
 	Gap          float32  `yaml:"gap,omitempty"`
 	Order        []string `yaml:"order,omitempty"` // widget ids, top → bottom
 	AlwaysOnTop  bool     `yaml:"always_on_top,omitempty"`
@@ -92,6 +96,11 @@ type WidgetConfig struct {
 	AssetsDir string `yaml:"-"`
 	// EditMode is set at runtime by the manager (not serialized).
 	EditMode bool `yaml:"-"`
+	// DesignWidth/DesignHeight are the shell rem reference (not serialized).
+	DesignWidth  float32 `yaml:"-"`
+	DesignHeight float32 `yaml:"-"`
+	// DesignBandHeight is this widget's flex weight / configured height (not serialized).
+	DesignBandHeight float32 `yaml:"-"`
 }
 
 // MeasureConfig describes one system metric cell in a metrics widget.
@@ -307,20 +316,14 @@ func validateMeasures(w WidgetConfig) error {
 
 // WidgetByID returns a pointer to the widget config with the given id.
 func (c *Config) WidgetByID(id string) *WidgetConfig {
-	for i := range c.Widgets {
-		if c.Widgets[i].ID == id {
-			return &c.Widgets[i]
-		}
+	if i := slices.IndexFunc(c.Widgets, func(w WidgetConfig) bool { return w.ID == id }); i >= 0 {
+		return &c.Widgets[i]
 	}
 	return nil
 }
 
 func digest(data []byte) string {
-	// cheap content fingerprint for ignore-own-write
-	var h uint64 = 14695981039346656037
-	for _, b := range data {
-		h ^= uint64(b)
-		h *= 1099511628211
-	}
-	return fmt.Sprintf("%x", h)
+	h := fnv.New64a()
+	_, _ = h.Write(data)
+	return fmt.Sprintf("%x", h.Sum64())
 }

@@ -135,8 +135,10 @@ func (c *Clock) Apply(cfg config.WidgetConfig) error {
 	if err := c.surface.applyColors(cfg); err != nil {
 		log.Printf("clock %q colors: %v", cfg.ID, err)
 	}
+	c.surface.ramp = widgetx.RampFromConfig(cfg)
 	c.lastWeekday = "" // force weekday refresh after style change
 	c.tick()
+	c.surface.Refresh()
 	return nil
 }
 
@@ -152,6 +154,7 @@ type dragSurface struct {
 	weekday   *canvas.Text
 	barFill   *canvas.Rectangle
 	detail    *canvas.Text
+	ramp      widgetx.Ramp
 }
 
 func newDragSurface() *dragSurface {
@@ -271,9 +274,9 @@ func (r *dragRenderer) Layout(size fyne.Size) {
 	s.dayBorder.Move(fyne.NewPos(pad, originY))
 	s.dayBorder.Resize(fyne.NewSize(innerW, dayH))
 
-	s.weekday.TextSize = dayH * 0.45
-	if s.weekday.TextSize < 22 {
-		s.weekday.TextSize = 22
+	s.weekday.TextSize = scaledPx(dayH*0.45, s.ramp.Scale(size))
+	if s.weekday.TextSize < scaledPx(22, s.ramp.Scale(size)) {
+		s.weekday.TextSize = scaledPx(22, s.ramp.Scale(size))
 	}
 	s.weekday.Move(fyne.NewPos(pad, originY))
 	s.weekday.Resize(fyne.NewSize(innerW, dayH))
@@ -282,9 +285,9 @@ func (r *dragRenderer) Layout(size fyne.Size) {
 	s.barFill.Move(fyne.NewPos(pad, barY))
 	s.barFill.Resize(fyne.NewSize(innerW, barH))
 
-	s.detail.TextSize = barH * 0.42
-	if s.detail.TextSize < 12 {
-		s.detail.TextSize = 12
+	s.detail.TextSize = scaledPx(barH*0.42, s.ramp.Scale(size))
+	if s.detail.TextSize < scaledPx(12, s.ramp.Scale(size)) {
+		s.detail.TextSize = scaledPx(12, s.ramp.Scale(size))
 	}
 	s.detail.Move(fyne.NewPos(pad, barY))
 	s.detail.Resize(fyne.NewSize(innerW, barH))
@@ -320,3 +323,14 @@ func (s *dragSurface) MouseOut()                     { s.drag.MouseOut() }
 
 var _ desktop.Mouseable = (*dragSurface)(nil)
 var _ desktop.Hoverable = (*dragSurface)(nil)
+
+func scaledPx(base, scale float32) float32 {
+	if base <= 0 {
+		return 0
+	}
+	v := base * scale
+	if v < 1 {
+		return 1
+	}
+	return float32(int(v + 0.5))
+}

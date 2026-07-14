@@ -107,11 +107,7 @@ func (v *Visualizer) Apply(cfg config.WidgetConfig) error {
 	if bars <= 0 {
 		bars = defaultBars
 	}
-	vizH := cfg.VisualizerHeight
-	if vizH <= 0 {
-		vizH = defaultVizH
-	}
-	v.surface.setBarCount(bars, vizH)
+	v.surface.setBarCount(bars)
 	if err := v.surface.applyStyle(cfg); err != nil {
 		log.Printf("visualizer %q style: %v", cfg.ID, err)
 	}
@@ -256,10 +252,16 @@ type surface struct {
 	timeLeft      *canvas.Text // elapsed / current
 	timeTotal     *canvas.Text // remaining
 
-	fg      color.Color
-	iconSz  float32
-	textSz  float32
-	iconGap float32
+	fg         color.Color
+	ramp       widgetx.Ramp
+	baseIconSz float32
+	baseTextSz float32
+	baseVizH   float32
+	baseIconGap float32
+	iconSz     float32
+	textSz     float32
+	captionSz  float32
+	iconGap    float32
 
 	lastTitle    string
 	lastArtist   string
@@ -321,11 +323,10 @@ func newSurface() *surface {
 
 func (s *surface) SetDraggable(on bool) { s.drag.Enabled = on }
 
-func (s *surface) setBarCount(n int, height float32) {
+func (s *surface) setBarCount(n int) {
 	if n < 4 {
 		n = 4
 	}
-	s.vizH = height
 	if len(s.bars) != n {
 		s.bars = make([]*canvas.Rectangle, n)
 		s.levels = make([]float32, n)
@@ -464,14 +465,20 @@ func (s *surface) applyStyle(cfg config.WidgetConfig) error {
 		return fmt.Errorf("visualizer_color: %w", err)
 	}
 	s.fg = col
-	s.iconSz = cfg.IconSize
-	if s.iconSz <= 0 {
-		s.iconSz = defaultIconSize
+	s.ramp = widgetx.RampFromConfig(cfg)
+	s.baseIconSz = cfg.IconSize
+	if s.baseIconSz <= 0 {
+		s.baseIconSz = defaultIconSize
 	}
-	s.textSz = cfg.TextSize
-	if s.textSz <= 0 {
-		s.textSz = defaultTextSize
+	s.baseTextSz = cfg.TextSize
+	if s.baseTextSz <= 0 {
+		s.baseTextSz = defaultTextSize
 	}
+	s.baseVizH = cfg.VisualizerHeight
+	if s.baseVizH <= 0 {
+		s.baseVizH = defaultVizH
+	}
+	s.baseIconGap = 10
 
 	iconFontPath := cfg.IconFont
 	if iconFontPath == "" {
@@ -501,10 +508,8 @@ func (s *surface) applyStyle(cfg config.WidgetConfig) error {
 	r := musicIconRune(cfg)
 	s.icon.Text = string(r)
 	s.icon.Color = col
-	s.icon.TextSize = s.iconSz
 	s.icon.FontSource = iconRes
 	s.title.Color = col
-	s.title.TextSize = s.textSz
 	s.title.FontSource = titleRes
 	s.title.TextStyle = fyne.TextStyle{}
 	dim := col
@@ -513,15 +518,12 @@ func (s *surface) applyStyle(cfg config.WidgetConfig) error {
 		dim = c
 	}
 	s.artist.Color = dim
-	s.artist.TextSize = widgetx.CaptionSize
 	s.artist.FontSource = captionRes
 	s.artist.TextStyle = fyne.TextStyle{}
 	s.timeLeft.Color = dim
-	s.timeLeft.TextSize = widgetx.CaptionSize
 	s.timeLeft.FontSource = captionRes
 	s.timeLeft.TextStyle = fyne.TextStyle{}
 	s.timeTotal.Color = dim
-	s.timeTotal.TextSize = widgetx.CaptionSize
 	s.timeTotal.FontSource = captionRes
 	s.timeTotal.TextStyle = fyne.TextStyle{}
 	for _, b := range s.bars {
@@ -534,7 +536,23 @@ func (s *surface) applyStyle(cfg config.WidgetConfig) error {
 		s.progressTrack.FillColor = color.NRGBA{R: 255, G: 255, B: 255, A: 40}
 		s.progressFill.FillColor = colorWhite
 	}
+	s.applyLayoutScale(s.Size())
 	return nil
+}
+
+func (s *surface) applyLayoutScale(size fyne.Size) {
+	r := s.ramp
+	s.iconSz = r.Icon(s.baseIconSz, size)
+	s.textSz = r.Text(s.baseTextSz, size)
+	s.captionSz = r.Px(s.baseTextSz*0.85, size)
+	s.vizH = r.Px(s.baseVizH, size)
+	s.iconGap = r.Px(s.baseIconGap, size)
+
+	s.icon.TextSize = s.iconSz
+	s.title.TextSize = s.textSz
+	s.artist.TextSize = s.captionSz
+	s.timeLeft.TextSize = s.captionSz
+	s.timeTotal.TextSize = s.captionSz
 }
 
 func musicIconRune(cfg config.WidgetConfig) rune {
@@ -598,6 +616,7 @@ func (s *surface) progressReserve() float32 {
 
 // layoutBars updates only spectrum bar geometry (60 Hz hot path).
 func (s *surface) layoutBars(size fyne.Size) {
+	s.applyLayoutScale(size)
 	vizH, barW, gapX, originX, _ := s.barRegion(size)
 	for i, b := range s.bars {
 		level := float32(0)
@@ -615,6 +634,7 @@ func (s *surface) layoutBars(size fyne.Size) {
 }
 
 func (s *surface) layoutAll(size fyne.Size) {
+	s.applyLayoutScale(size)
 	s.rootBG.Move(fyne.NewPos(0, 0))
 	s.rootBG.Resize(size)
 
@@ -710,7 +730,6 @@ func (s *surface) layoutProgress(size fyne.Size, iconX, iconColW, textX, textW f
 	const (
 		progressH float32 = 2
 		timeGap   float32 = 8
-		timeMinW  float32 = 40
 	)
 	timeH := s.timeLeft.TextSize
 	if timeH < 9 {
@@ -740,36 +759,52 @@ func (s *surface) layoutProgress(size fyne.Size, iconX, iconColW, textX, textW f
 		return
 	}
 
-	// Col 1: elapsed under the music icon.
-	leftW := iconColW
-	if leftW < timeMinW {
-		leftW = timeMinW
+	// Single row in the text column: elapsed | gap | bar | gap | remaining.
+	style := fyne.TextStyle{}
+	leftW := fyne.MeasureText(s.timeLeft.Text, timeH, style).Width + 2
+	rightW := fyne.MeasureText(s.timeTotal.Text, timeH, style).Width + 2
+	if leftW < 28 {
+		leftW = 28
 	}
-	s.timeLeft.Alignment = fyne.TextAlignCenter
-	s.timeLeft.Move(fyne.NewPos(iconX, ty))
-	s.timeLeft.Resize(fyne.NewSize(leftW, timeH))
-
-	// Col 2: progress bar + remaining, aligned with title/artist.
-	rightW := timeMinW
-	barW := textW - rightW - timeGap
+	if rightW < 28 {
+		rightW = 28
+	}
+	barW := textW - leftW - rightW - 2*timeGap
 	if barW < 24 {
 		barW = 24
-		rightW = textW - barW - timeGap
-		if rightW < 28 {
-			rightW = 28
+		overflow := leftW + rightW + 2*timeGap + barW - textW
+		if overflow > 0 {
+			shrink := overflow / 2
+			leftW -= shrink
+			rightW -= shrink
+			if leftW < 24 {
+				rightW -= 24 - leftW
+				leftW = 24
+			}
+			if rightW < 24 {
+				leftW -= 24 - rightW
+				rightW = 24
+			}
 		}
 	}
-	s.progressTrack.Move(fyne.NewPos(textX, by))
+
+	barX := textX + leftW + timeGap
+	s.timeLeft.Alignment = fyne.TextAlignLeading
+	s.timeLeft.Move(fyne.NewPos(textX, ty))
+	s.timeLeft.Resize(fyne.NewSize(leftW, timeH))
+
+	s.progressTrack.Move(fyne.NewPos(barX, by))
 	s.progressTrack.Resize(fyne.NewSize(barW, progressH))
 	fillW := float32(s.progress) * barW
 	if fillW < 0 {
 		fillW = 0
 	}
-	s.progressFill.Move(fyne.NewPos(textX, by))
+	s.progressFill.Move(fyne.NewPos(barX, by))
 	s.progressFill.Resize(fyne.NewSize(fillW, progressH))
 
+	remainX := barX + barW + timeGap
 	s.timeTotal.Alignment = fyne.TextAlignTrailing
-	s.timeTotal.Move(fyne.NewPos(textX+textW-rightW, ty))
+	s.timeTotal.Move(fyne.NewPos(remainX, ty))
 	s.timeTotal.Resize(fyne.NewSize(rightW, timeH))
 }
 

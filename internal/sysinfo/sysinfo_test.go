@@ -63,3 +63,12 @@ func TestFormatUsageLine(t *testing.T) {
 		t.Fatalf("usage missing: %q", got)
 	}
 }
+
+func TestFormatTempLine(t *testing.T) {
+	if got := FormatTempLine(Temp{Celsius: 72.4, OK: true}); got != "72°" {
+		t.Fatalf("temp: %q", got)
+	}
+	if got := FormatTempLine(Temp{}); got != "" {
+		t.Fatalf("temp missing: %q", got)
+	}
+}

@@ -68,7 +68,7 @@ Key sections:
 
 | Section | Role |
 | --- | --- |
-| `shell` | Overlay position/size, widget `order`, transparency, `click_through` |
+| `shell` | Overlay position/size, widget `order`, transparency, `click_through`, `design_width` / `design_height` (rem reference) |
 | `widgets` | Per-widget type, fonts, sizes, enabled flag |
 | `icon_map` | Path (under `assets/`) to name→hex JSON |
 | `media_apps` | SMTC allowlist substrings on the visualizer widget |
@@ -76,6 +76,8 @@ Key sections:
 **Weather:** set `place` to a city name (e.g. `Toronto`) or a US ZIP. Canadian postals often fail — use a city instead. Units default to `f` (`c` also supported). Uses [Open-Meteo](https://open-meteo.com/) — no API key. Legacy `zip:` still works as an alias for `place`.
 
 **Hot-reload:** editing `config.yml` reloads the UI (fsnotify). Tray → **Reload config** does the same.
+
+**Responsive sizing:** `text_size`, `icon_size`, `visualizer_height`, and metric gaps are design tokens tuned at `shell.design_width` × each widget's `height` band. If `design_width` / `design_height` are omitted, they default to the saved `shell.width` / `shell.height` so typography matches your current layout at scale 1.0. When you resize the overlay in edit mode, fonts and icons scale uniformly with the container. Saving geometry updates `shell.width` / `shell.height` only — not the design reference — so typography stays scaled relative to your tuned baseline. To make fonts larger at your current size, set `design_width` / `design_height` lower than the live shell (e.g. the size you originally tuned at).
 
 ### Edit mode / tray
 

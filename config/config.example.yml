@@ -8,6 +8,8 @@ shell:
   y: 80
   width: 420
   height: 780
+  design_width: 420   # rem reference for text_size / icon_size (not updated by edit-mode resize)
+  design_height: 780  # rem reference for text_size / icon_size (not updated by edit-mode resize)
   gap: 12
   order:
     - main-visualizer
@@ -63,6 +65,7 @@ widgets:
     place: Toronto # city name, or US ZIP (e.g. "10001")
     units: f
     accent_color: "#7EC8E3"
+    rule_color: "#FFFFFF"
     height: 210
 
   - id: sys-metrics

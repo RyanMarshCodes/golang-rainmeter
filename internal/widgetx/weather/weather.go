@@ -202,13 +202,23 @@ type surface struct {
 	temp       *canvas.Text
 	todayRange *canvas.Text
 	condition  *canvas.Text
+	sunUp      *canvas.Text
+	sunDown    *canvas.Text
 	detailKey [3]*canvas.Text
 	detailVal [3]*canvas.Text
 	status    *canvas.Text
 	days      [forecastDays]dayCol
 
+	ramp       widgetx.Ramp
+	baseIconSz float32
+	baseTextSz float32
+	iconRes    fyne.Resource
+	labelRes   fyne.Resource
+	boldRes    fyne.Resource
+
 	fg     color.Color
 	dim    color.Color
+	ruleCol color.Color
 	iconSz float32
 	textSz float32
 	tempSz float32
@@ -220,7 +230,8 @@ func newSurface() *surface {
 		rootBG:  canvas.NewRectangle(winutil.ClearColor()),
 		panel:   canvas.NewRectangle(winutil.ClearColor()),
 		accent:  canvas.NewRectangle(defaultAccent),
-		rule:    canvas.NewRectangle(color.NRGBA{R: 255, G: 255, B: 255, A: 180}),
+		rule:    canvas.NewRectangle(color.NRGBA{R: 255, G: 255, B: 255, A: 55}),
+		ruleCol: color.NRGBA{R: 255, G: 255, B: 255, A: 55},
 		fg:      colorWhite,
 		dim:     color.NRGBA{R: 255, G: 255, B: 255, A: 200},
 		iconSz:  42,
@@ -246,6 +257,16 @@ func newSurface() *surface {
 			Color:     colorWhite,
 			TextSize:  13,
 			Alignment: fyne.TextAlignLeading,
+		},
+		sunUp: &canvas.Text{
+			Color:     colorWhite,
+			TextSize:  11,
+			Alignment: fyne.TextAlignCenter,
+		},
+		sunDown: &canvas.Text{
+			Color:     colorWhite,
+			TextSize:  11,
+			Alignment: fyne.TextAlignCenter,
 		},
 		status: &canvas.Text{
 			Color:     color.NRGBA{R: 255, G: 180, B: 80, A: 255},
@@ -307,6 +328,8 @@ func (s *surface) setSnapshot(snap wx.Snapshot, metric bool) {
 		s.temp.Hide()
 		s.todayRange.Hide()
 		s.condition.Hide()
+		s.sunUp.Hide()
+		s.sunDown.Hide()
 		for i := 0; i < 3; i++ {
 			s.detailKey[i].Hide()
 			s.detailVal[i].Hide()
@@ -326,8 +349,15 @@ func (s *surface) setSnapshot(snap wx.Snapshot, metric bool) {
 	s.temp.Show()
 	s.todayRange.Show()
 	s.condition.Show()
+	if len(snap.Forecast) > 0 && snap.Forecast[0].SunOK {
+		s.sunUp.Show()
+		s.sunDown.Show()
+	} else {
+		s.sunUp.Hide()
+		s.sunDown.Hide()
+	}
 	for i := 0; i < 3; i++ {
-		s.detailKey[i].Show()
+		s.detailKey[i].Hide()
 		s.detailVal[i].Show()
 	}
 
@@ -337,13 +367,18 @@ func (s *surface) setSnapshot(snap wx.Snapshot, metric bool) {
 		today := snap.Forecast[0]
 		s.todayRange.Text = wx.FormatRange(today.HighC, today.LowC)
 		s.todayRange.Show()
+		up, down := wx.FormatSunLines(today.Sunrise, today.Sunset, today.SunOK)
+		s.sunUp.Text = up
+		s.sunDown.Text = down
 	} else {
 		s.todayRange.Hide()
+		s.sunUp.Hide()
+		s.sunDown.Hide()
 	}
 	s.condition.Text = snap.Current.Label
-	s.detailVal[0].Text = wx.FormatTemp(snap.Current.FeelsC)
-	s.detailVal[1].Text = fmt.Sprintf("%d%%", snap.Current.Humidity)
-	s.detailVal[2].Text = wx.FormatWind(snap.Current.WindDeg, snap.Current.WindKmh, metric)
+	s.detailVal[0].Text = "Feels Like: " + wx.FormatTemp(snap.Current.FeelsC)
+	s.detailVal[1].Text = fmt.Sprintf("Humidity: %d%%", snap.Current.Humidity)
+	s.detailVal[2].Text = "Wind: " + wx.FormatWind(snap.Current.WindDeg, snap.Current.WindKmh, metric)
 
 	for i := 0; i < forecastDays; i++ {
 		if i >= len(snap.Forecast) {
@@ -373,6 +408,8 @@ func (s *surface) refreshAll() {
 	canvas.Refresh(s.temp)
 	canvas.Refresh(s.todayRange)
 	canvas.Refresh(s.condition)
+	canvas.Refresh(s.sunUp)
+	canvas.Refresh(s.sunDown)
 	canvas.Refresh(s.status)
 	for i := 0; i < 3; i++ {
 		canvas.Refresh(s.detailKey[i])
@@ -397,6 +434,15 @@ func (s *surface) applyStyle(cfg config.WidgetConfig) error {
 	if _, err := config.ParseColor(cfg.AccentColor, defaultAccent); err != nil {
 		return fmt.Errorf("accent_color: %w", err)
 	}
+	ruleCol, err := config.ParseColor(cfg.RuleColor, col)
+	if err != nil {
+		return fmt.Errorf("rule_color: %w", err)
+	}
+	if c, ok := ruleCol.(color.NRGBA); ok {
+		c.A = 55
+		ruleCol = c
+	}
+	s.ruleCol = ruleCol
 	panel := winutil.ClearColor()
 	if strings.TrimSpace(cfg.PanelColor) != "" {
 		panel, err = config.ParseColor(cfg.PanelColor, panel)
@@ -411,23 +457,15 @@ func (s *surface) applyStyle(cfg config.WidgetConfig) error {
 	} else {
 		s.dim = color.NRGBA{R: 255, G: 255, B: 255, A: 200}
 	}
-	s.iconSz = cfg.IconSize
-	if s.iconSz <= 0 {
-		s.iconSz = 42
+	s.ramp = widgetx.RampFromConfig(cfg)
+	s.baseIconSz = cfg.IconSize
+	if s.baseIconSz <= 0 {
+		s.baseIconSz = 42
 	}
-	s.textSz = cfg.TextSize
-	if s.textSz <= 0 {
-		s.textSz = widgetx.CaptionSize
+	s.baseTextSz = cfg.TextSize
+	if s.baseTextSz <= 0 {
+		s.baseTextSz = widgetx.CaptionSize
 	}
-	s.tempSz = s.textSz * 3
-	if s.tempSz < 28 {
-		s.tempSz = 28
-	}
-	detailSz := float32(int(s.textSz)) // avoid fractional glyph sizes
-	if detailSz < widgetx.CaptionSize {
-		detailSz = widgetx.CaptionSize
-	}
-	forecastSz := detailSz
 
 	iconPath := cfg.IconFont
 	if iconPath == "" {
@@ -453,65 +491,93 @@ func (s *surface) applyStyle(cfg config.WidgetConfig) error {
 	if err != nil {
 		return fmt.Errorf("weekday_font: %w", err)
 	}
+	s.iconRes = iconRes
+	s.labelRes = labelRes
+	s.boldRes = boldRes
 
 	s.panel.FillColor = panel
 	s.accent.Hide()
-	s.rule.Hide()
+	s.rule.FillColor = s.ruleCol
 	s.rootBG.FillColor = winutil.ClearColor()
 
 	s.bigIcon.Color = col
-	s.bigIcon.TextSize = s.iconSz
 	s.bigIcon.FontSource = iconRes
 
 	s.temp.Color = col
-	s.temp.TextSize = s.tempSz
 	s.temp.FontSource = boldRes
 
 	s.todayRange.Color = col
-	s.todayRange.TextSize = forecastSz
 	s.todayRange.FontSource = labelRes
 	s.todayRange.TextStyle = fyne.TextStyle{}
 	s.todayRange.Alignment = fyne.TextAlignCenter
 
 	s.condition.Color = s.dim
-	s.condition.TextSize = detailSz
 	s.condition.FontSource = labelRes
 	s.condition.TextStyle = fyne.TextStyle{}
 
+	s.sunUp.Color = col
+	s.sunUp.FontSource = labelRes
+	s.sunUp.TextStyle = fyne.TextStyle{}
+	s.sunUp.Alignment = fyne.TextAlignCenter
+	s.sunDown.Color = col
+	s.sunDown.FontSource = labelRes
+	s.sunDown.TextStyle = fyne.TextStyle{}
+	s.sunDown.Alignment = fyne.TextAlignCenter
+
 	for i := 0; i < 3; i++ {
 		s.detailKey[i].Color = s.dim
-		s.detailKey[i].TextSize = detailSz
 		s.detailKey[i].FontSource = labelRes
 		s.detailKey[i].TextStyle = fyne.TextStyle{}
 		s.detailVal[i].Color = col
-		s.detailVal[i].TextSize = detailSz
 		s.detailVal[i].FontSource = labelRes
 		s.detailVal[i].TextStyle = fyne.TextStyle{}
 	}
 	s.status.FontSource = labelRes
-	s.status.TextSize = detailSz
 	s.status.TextStyle = fyne.TextStyle{}
 
 	for i := 0; i < forecastDays; i++ {
 		s.days[i].icon.Color = col
-		s.days[i].icon.TextSize = float32(int(s.iconSz * 0.5))
-		if s.days[i].icon.TextSize < 18 {
-			s.days[i].icon.TextSize = 18
-		}
 		s.days[i].icon.FontSource = iconRes
 		s.days[i].temps.Color = col
-		s.days[i].temps.TextSize = forecastSz
 		s.days[i].temps.FontSource = labelRes
 		s.days[i].temps.TextStyle = fyne.TextStyle{}
 		s.days[i].name.Color = s.dim
-		s.days[i].name.TextSize = forecastSz
 		s.days[i].name.FontSource = labelRes
 		s.days[i].name.TextStyle = fyne.TextStyle{}
 	}
+	s.applyLayoutScale(s.Size())
 	return nil
 }
 
+func (s *surface) applyLayoutScale(size fyne.Size) {
+	r := s.ramp
+	s.textSz = r.Text(s.baseTextSz, size)
+	s.iconSz = r.Icon(s.baseIconSz, size)
+	s.tempSz = r.Px(s.baseTextSz*3, size)
+	detailSz := s.textSz
+	forecastSz := s.textSz
+	forecastIconSz := r.Px(s.baseIconSz*0.5, size)
+
+	s.bigIcon.TextSize = s.iconSz
+	s.temp.TextSize = s.tempSz
+	s.todayRange.TextSize = forecastSz
+	s.condition.TextSize = detailSz
+	s.sunUp.TextSize = forecastSz
+	s.sunDown.TextSize = forecastSz
+	for i := 0; i < 3; i++ {
+		s.detailKey[i].TextSize = detailSz
+		s.detailVal[i].TextSize = detailSz
+	}
+	s.status.TextSize = detailSz
+	for i := 0; i < forecastDays; i++ {
+		s.days[i].icon.TextSize = forecastIconSz
+		s.days[i].temps.TextSize = forecastSz
+		s.days[i].name.TextSize = forecastSz
+	}
+}
+
 func (s *surface) layoutAll(size fyne.Size) {
+	s.applyLayoutScale(size)
 	s.rootBG.Resize(size)
 	s.rootBG.Move(fyne.NewPos(0, 0))
 
@@ -543,6 +609,7 @@ func (s *surface) layoutAll(size fyne.Size) {
 	if !s.status.Hidden {
 		s.status.Move(fyne.NewPos(pad, size.Height/2-8))
 		s.status.Resize(fyne.NewSize(innerW, 20))
+		s.rule.Hide()
 		return
 	}
 
@@ -559,39 +626,46 @@ func (s *surface) layoutAll(size fyne.Size) {
 	s.bigIcon.Move(fyne.NewPos(col0X, contentTop+(rowH-iconH)/2))
 	s.bigIcon.Resize(fyne.NewSize(colW, iconH))
 
-	// Column 1: current temp + condition
+	// Column 1: current temp + high/low + condition
 	col1X := pad + colW
-	stackH := s.tempSz + stackGap + s.textSz
+	rangeH := s.textSz + 2
+	stackH := s.tempSz + stackGap + rangeH + stackGap + s.textSz
 	stackTop := contentTop + (rowH-stackH)/2
 	if stackTop < contentTop {
 		stackTop = contentTop
 	}
 	s.temp.Alignment = fyne.TextAlignCenter
+	s.todayRange.Alignment = fyne.TextAlignCenter
 	s.condition.Alignment = fyne.TextAlignCenter
 	s.temp.Move(fyne.NewPos(col1X, stackTop))
 	s.temp.Resize(fyne.NewSize(colW, s.tempSz+2))
-	s.condition.Move(fyne.NewPos(col1X, stackTop+s.tempSz+stackGap))
+	rangeY := stackTop + s.tempSz + stackGap
+	s.todayRange.Move(fyne.NewPos(col1X, rangeY))
+	s.todayRange.Resize(fyne.NewSize(colW, rangeH))
+	s.condition.Move(fyne.NewPos(col1X, rangeY+rangeH+stackGap))
 	s.condition.Resize(fyne.NewSize(colW, s.textSz+2))
 
-	// Column 2: today's high / low
+	// Column 2: sunrise / sunset
 	col2X := pad + 2*colW
-	rangeH := s.textSz + 2
-	s.todayRange.Alignment = fyne.TextAlignCenter
-	s.todayRange.Move(fyne.NewPos(col2X, contentTop+(rowH-rangeH)/2))
-	s.todayRange.Resize(fyne.NewSize(colW, rangeH))
+	sunLineH := s.textSz + 2
+	const sunGap float32 = 1
+	sunBlockH := sunLineH + sunGap + sunLineH
+	sunTop := contentTop + (rowH-sunBlockH)/2
+	s.sunUp.Move(fyne.NewPos(col2X, sunTop))
+	s.sunUp.Resize(fyne.NewSize(colW, sunLineH))
+	s.sunDown.Move(fyne.NewPos(col2X, sunTop+sunLineH+sunGap))
+	s.sunDown.Resize(fyne.NewSize(colW, sunLineH))
 
-	// Column 3: feels like / humidity / wind
+	// Column 3: feels like / humidity / wind (trailing-aligned in column)
 	col3X := pad + 3*colW
 	lineH := s.textSz + 4
 	detailBlockH := lineH * 3
 	detailStartY := contentTop + (rowH-detailBlockH)/2
-	keyW := colW * 0.58
 	for i := 0; i < 3; i++ {
 		y := detailStartY + float32(i)*lineH
-		s.detailKey[i].Move(fyne.NewPos(col3X, y))
-		s.detailKey[i].Resize(fyne.NewSize(keyW, lineH))
-		s.detailVal[i].Move(fyne.NewPos(col3X+keyW, y))
-		s.detailVal[i].Resize(fyne.NewSize(colW-keyW, lineH))
+		s.detailVal[i].Alignment = fyne.TextAlignTrailing
+		s.detailVal[i].Move(fyne.NewPos(col3X, y))
+		s.detailVal[i].Resize(fyne.NewSize(colW, lineH))
 	}
 
 	botTop := splitY + widgetx.RowGap/2
@@ -614,6 +688,16 @@ func (s *surface) layoutAll(size fyne.Size) {
 		s.days[i].name.Move(fyne.NewPos(x, blockTop+dayIconH+fGap+tempsH+fGap))
 		s.days[i].name.Resize(fyne.NewSize(colW, nameH))
 	}
+
+	// Subtle bottom hairline separating weather from the next widget.
+	const ruleH float32 = 1
+	ruleY := size.Height - widgetx.PadY - ruleH
+	if ruleY < 0 {
+		ruleY = 0
+	}
+	s.rule.Show()
+	s.rule.Move(fyne.NewPos(pad, ruleY))
+	s.rule.Resize(fyne.NewSize(innerW, ruleH))
 }
 func (s *surface) CreateRenderer() fyne.WidgetRenderer {
 	return &renderer{surface: s}
@@ -637,7 +721,7 @@ func (r *renderer) Objects() []fyne.CanvasObject {
 	s := r.surface
 	objs := []fyne.CanvasObject{
 		s.rootBG, s.panel, s.accent, s.rule,
-		s.bigIcon, s.temp, s.todayRange, s.condition, s.status,
+		s.bigIcon, s.temp, s.todayRange, s.condition, s.sunUp, s.sunDown, s.status,
 	}
 	for i := 0; i < 3; i++ {
 		objs = append(objs, s.detailKey[i], s.detailVal[i])

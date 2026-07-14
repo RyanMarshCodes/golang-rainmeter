@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image/color"
 	"log"
+	"slices"
 	"sync"
 	"time"
 
@@ -117,15 +118,7 @@ func (m *Metrics) Apply(cfg config.WidgetConfig) error {
 }
 
 func measuresEqual(a, b []config.MeasureConfig) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
+	return slices.Equal(a, b)
 }
 
 func (m *Metrics) requestPoll() {
@@ -207,13 +200,19 @@ func formatMeasure(mc config.MeasureConfig) measureLines {
 			label = "CPU"
 		}
 		u := sysinfo.CPUPercent(0.2)
-		return measureLines{primary: sysinfo.FormatUsageLine(label, u.Percent, u.OK)}
+		return measureLines{
+			primary:   sysinfo.FormatUsageLine(label, u.Percent, u.OK),
+			secondary: sysinfo.FormatTempLine(sysinfo.CPUTemp()),
+		}
 	case "gpu":
 		if label == "" {
 			label = "GPU"
 		}
 		u := sysinfo.GPUPercentIndex(mc.GPU)
-		return measureLines{primary: sysinfo.FormatUsageLine(label, u.Percent, u.OK)}
+		return measureLines{
+			primary:   sysinfo.FormatUsageLine(label, u.Percent, u.OK),
+			secondary: sysinfo.FormatTempLine(sysinfo.GPUTempIndex(mc.GPU)),
+		}
 	case "memory":
 		if label == "" {
 			label = "RAM"
@@ -253,12 +252,17 @@ type gridSurface struct {
 	measures   []config.MeasureConfig
 	editMode   bool
 
-	columns int
-	gapX    float32
-	gapY    float32
-	iconSz  float32
-	textSz  float32
-	fg      color.Color
+	columns    int
+	baseGapX   float32
+	baseGapY   float32
+	baseIconSz float32
+	baseTextSz float32
+	ramp       widgetx.Ramp
+	gapX       float32
+	gapY       float32
+	iconSz     float32
+	textSz     float32
+	fg         color.Color
 }
 
 func newGridSurface() *gridSurface {
@@ -297,21 +301,22 @@ func (s *gridSurface) applyStyle(cfg config.WidgetConfig) error {
 	}
 	s.fg = col
 	s.columns = cfg.Columns
-	s.gapX = cfg.GapX
-	if s.gapX <= 0 {
-		s.gapX = defaultGapX
+	s.ramp = widgetx.RampFromConfig(cfg)
+	s.baseGapX = cfg.GapX
+	if s.baseGapX <= 0 {
+		s.baseGapX = defaultGapX
 	}
-	s.gapY = cfg.GapY
-	if s.gapY <= 0 {
-		s.gapY = defaultGapY
+	s.baseGapY = cfg.GapY
+	if s.baseGapY <= 0 {
+		s.baseGapY = defaultGapY
 	}
-	s.iconSz = cfg.IconSize
-	if s.iconSz <= 0 {
-		s.iconSz = defaultIconSize
+	s.baseIconSz = cfg.IconSize
+	if s.baseIconSz <= 0 {
+		s.baseIconSz = defaultIconSize
 	}
-	s.textSz = cfg.TextSize
-	if s.textSz <= 0 {
-		s.textSz = defaultTextSize
+	s.baseTextSz = cfg.TextSize
+	if s.baseTextSz <= 0 {
+		s.baseTextSz = defaultTextSize
 	}
 
 	iconFontPath := cfg.IconFont
@@ -333,18 +338,29 @@ func (s *gridSurface) applyStyle(cfg config.WidgetConfig) error {
 
 	for i := range s.cells {
 		s.cells[i].icon.Color = col
-		s.cells[i].icon.TextSize = s.iconSz
 		s.cells[i].icon.FontSource = iconRes
 		s.cells[i].label.Color = col
-		s.cells[i].label.TextSize = s.textSz
 		s.cells[i].label.FontSource = labelRes
 		s.cells[i].label.TextStyle = fyne.TextStyle{}
 		s.cells[i].label2.Color = col
-		s.cells[i].label2.TextSize = s.textSz
 		s.cells[i].label2.FontSource = labelRes
 		s.cells[i].label2.TextStyle = fyne.TextStyle{}
 	}
+	s.applyLayoutScale(s.Size())
 	return nil
+}
+
+func (s *gridSurface) applyLayoutScale(size fyne.Size) {
+	r := s.ramp
+	s.iconSz = r.Icon(s.baseIconSz, size)
+	s.textSz = r.Text(s.baseTextSz, size)
+	s.gapX = r.Px(s.baseGapX, size)
+	s.gapY = r.Px(s.baseGapY, size)
+	for i := range s.cells {
+		s.cells[i].icon.TextSize = s.iconSz
+		s.cells[i].label.TextSize = s.textSz
+		s.cells[i].label2.TextSize = s.textSz
+	}
 }
 
 func (s *gridSurface) rebuild(measures []config.MeasureConfig) {
@@ -421,6 +437,7 @@ func (s *gridSurface) setLines(lines []measureLines) {
 }
 
 func (s *gridSurface) layoutCells(size fyne.Size) {
+	s.applyLayoutScale(size)
 	s.rootBG.Move(fyne.NewPos(0, 0))
 	s.rootBG.Resize(size)
 	if len(s.cells) == 0 {
@@ -481,35 +498,53 @@ func (s *gridSurface) layoutCells(size fyne.Size) {
 	s.layoutCellGroup(all, pad, originY, innerW, innerH, cols)
 }
 
+func (s *gridSurface) cellStackH(c *measureCell) float32 {
+	iconH := s.iconSz
+	labelH := s.textSz + 2
+	const lineGap float32 = 1
+	const stackGap float32 = 4
+	stackH := iconH + stackGap + labelH
+	if !c.label2.Hidden && c.label2.Text != "" {
+		stackH += lineGap + labelH
+	}
+	return stackH
+}
+
 func (s *gridSurface) layoutCellGroup(idxs []int, pad, originY, innerW, bandH float32, cols int) {
 	if len(idxs) == 0 || bandH < 1 {
 		return
 	}
 	rows := (len(idxs) + cols - 1) / cols
 	cellW := innerW / float32(cols)
-	cellH := bandH / float32(rows)
-	iconH := s.iconSz
-	labelH := s.textSz + 2
-	lineGap := float32(1)
-	stackGap := float32(4)
+	rowGap := s.gapY
+	if rowGap < widgetx.RowGap {
+		rowGap = widgetx.RowGap
+	}
 
-	// Keep icon baselines aligned when any cell in the group has two caption lines.
-	groupTwoLine := false
-	for _, i := range idxs {
-		if !s.cells[i].label2.Hidden && s.cells[i].label2.Text != "" {
-			groupTwoLine = true
-			break
+	rowStacks := make([]float32, rows)
+	for n, i := range idxs {
+		row := n / cols
+		if h := s.cellStackH(&s.cells[i]); h > rowStacks[row] {
+			rowStacks[row] = h
 		}
 	}
-	stackH := iconH + stackGap + labelH
-	if groupTwoLine {
-		stackH += lineGap + labelH
+	totalStack := float32(0)
+	for _, h := range rowStacks {
+		totalStack += h
+	}
+	if rows > 1 {
+		totalStack += rowGap * float32(rows-1)
+	}
+	blockTop := originY + (bandH-totalStack)/2
+	if blockTop < originY {
+		blockTop = originY
 	}
 
-	for n, i := range idxs {
-		c := s.cells[i]
-		row := n / cols
-		col := n % cols
+	rowY := blockTop
+	for row := 0; row < rows; row++ {
+		if row > 0 {
+			rowY += rowStacks[row-1] + rowGap
+		}
 		rowStart := row * cols
 		rowCount := cols
 		if rowStart+rowCount > len(idxs) {
@@ -517,30 +552,40 @@ func (s *gridSurface) layoutCellGroup(idxs []int, pad, originY, innerW, bandH fl
 		}
 		rowOffset := (float32(cols-rowCount) * cellW) / 2
 
-		x := pad + rowOffset + float32(col)*cellW
-		y := originY + float32(row)*cellH
-		top := y + (cellH-stackH)/2
-		if top < y {
-			top = y
-		}
+		for col := 0; col < rowCount; col++ {
+			n := rowStart + col
+			i := idxs[n]
+			c := &s.cells[i]
+			stackH := s.cellStackH(c)
 
-		c.icon.Alignment = fyne.TextAlignCenter
-		c.label.Alignment = fyne.TextAlignCenter
-		c.label2.Alignment = fyne.TextAlignCenter
-		c.icon.TextSize = s.iconSz
-		c.label.TextSize = s.textSz
-		c.label2.TextSize = s.textSz
-		c.icon.Move(fyne.NewPos(x, top))
-		c.icon.Resize(fyne.NewSize(cellW, iconH))
-		ly := top + iconH + stackGap
-		c.label.Move(fyne.NewPos(x, ly))
-		c.label.Resize(fyne.NewSize(cellW, labelH))
-		if !c.label2.Hidden && c.label2.Text != "" {
-			c.label2.Move(fyne.NewPos(x, ly+labelH+lineGap))
-			c.label2.Resize(fyne.NewSize(cellW, labelH))
-		} else {
-			c.label2.Move(fyne.NewPos(x, ly))
-			c.label2.Resize(fyne.NewSize(cellW, 0))
+			x := pad + rowOffset + float32(col)*cellW
+			top := rowY + (rowStacks[row]-stackH)/2
+			if top < rowY {
+				top = rowY
+			}
+
+			c.icon.Alignment = fyne.TextAlignCenter
+			c.label.Alignment = fyne.TextAlignCenter
+			c.label2.Alignment = fyne.TextAlignCenter
+			c.icon.TextSize = s.iconSz
+			c.label.TextSize = s.textSz
+			c.label2.TextSize = s.textSz
+			iconH := s.iconSz
+			labelH := s.textSz + 2
+			const lineGap float32 = 1
+			const stackGap float32 = 4
+			c.icon.Move(fyne.NewPos(x, top))
+			c.icon.Resize(fyne.NewSize(cellW, iconH))
+			ly := top + iconH + stackGap
+			c.label.Move(fyne.NewPos(x, ly))
+			c.label.Resize(fyne.NewSize(cellW, labelH))
+			if !c.label2.Hidden && c.label2.Text != "" {
+				c.label2.Move(fyne.NewPos(x, ly+labelH+lineGap))
+				c.label2.Resize(fyne.NewSize(cellW, labelH))
+			} else {
+				c.label2.Move(fyne.NewPos(x, ly))
+				c.label2.Resize(fyne.NewSize(cellW, 0))
+			}
 		}
 	}
 }

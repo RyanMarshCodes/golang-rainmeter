@@ -46,7 +46,12 @@ func (r *shellRoot) CreateRenderer() fyne.WidgetRenderer {
 	return &shellRootRenderer{root: r}
 }
 
-func (r *shellRoot) MinSize() fyne.Size { return fyne.NewSize(120, 120) }
+func (r *shellRoot) MinSize() fyne.Size {
+	if r.stack != nil && r.stack.Layout != nil {
+		return r.stack.Layout.MinSize(r.stack.Objects)
+	}
+	return fyne.NewSize(120, 120)
+}
 
 type shellRootRenderer struct {
 	root *shellRoot
@@ -189,6 +194,14 @@ func (s *Shell) Apply(cfg config.ShellConfig, editMode bool) {
 	if h <= 0 {
 		h = 680
 	}
+	if min := s.minContentSize(); min.Width > 0 && min.Height > 0 {
+		if w < min.Width {
+			w = min.Width
+		}
+		if h < min.Height {
+			h = min.Height
+		}
+	}
 	s.win.Resize(fyne.NewSize(w, h))
 	s.applyNative(int(w), int(h))
 	if s.root != nil {
@@ -252,6 +265,13 @@ func (s *Shell) SetPanels(objs []fyne.CanvasObject, weights []float32, mins []fy
 	if r := s.win.Content(); r != nil {
 		r.Refresh()
 	}
+}
+
+func (s *Shell) minContentSize() fyne.Size {
+	if s.layout == nil || s.stack == nil {
+		return fyne.NewSize(0, 0)
+	}
+	return s.layout.MinSize(s.stack.Objects)
 }
 
 func (s *Shell) Hide() { s.win.Hide() }

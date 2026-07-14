@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2"
 	fyneapp "fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/driver/desktop"
+	"fyne.io/systray"
 
 	"github.com/RyanMarshCodes/golang-rainmeter/internal/config"
 	"github.com/RyanMarshCodes/golang-rainmeter/internal/widgetx"
@@ -32,6 +33,9 @@ type App struct {
 
 	geomDebounce *time.Timer
 	lastGeom     map[string]geom
+
+	trayTapMu   sync.Mutex
+	lastTrayTap time.Time
 }
 
 type geom struct {
@@ -108,6 +112,27 @@ func (a *App) setupTray() {
 		return
 	}
 	desk.SetSystemTrayMenu(a.buildMenu())
+	a.installTrayDefaultAction()
+}
+
+// installTrayDefaultAction binds left double-tap on the tray icon to edit mode.
+// Fyne/systray do not expose double-click; two left taps within 400ms count as one.
+// Right-click still opens the tray menu.
+func (a *App) installTrayDefaultAction() {
+	systray.SetOnTapped(a.onTrayIconTap)
+}
+
+func (a *App) onTrayIconTap() {
+	a.trayTapMu.Lock()
+	now := time.Now()
+	if !a.lastTrayTap.IsZero() && now.Sub(a.lastTrayTap) < 400*time.Millisecond {
+		a.lastTrayTap = time.Time{}
+		a.trayTapMu.Unlock()
+		fyne.Do(func() { a.toggleEditMode() })
+		return
+	}
+	a.lastTrayTap = now
+	a.trayTapMu.Unlock()
 }
 
 func (a *App) buildMenu() *fyne.Menu {
@@ -194,6 +219,7 @@ func (a *App) refreshTray() {
 	if desk, ok := a.fyne.(desktop.App); ok {
 		desk.SetSystemTrayMenu(a.buildMenu())
 	}
+	a.installTrayDefaultAction()
 }
 
 func (a *App) isShellVisible() bool {

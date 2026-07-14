@@ -1,6 +1,10 @@
 package weather
 
-import "strconv"
+import (
+	"strconv"
+	"strings"
+	"time"
+)
 
 // Describe maps a WMO weather interpretation code to a short label and
 // logical icon name (resolved via assets/fonts/icons/icon-map.json).
@@ -58,6 +62,31 @@ func FormatTemp(v float64) string {
 // FormatRange formats high / low.
 func FormatRange(high, low float64) string {
 	return FormatTemp(high) + " / " + FormatTemp(low)
+}
+
+// FormatSunLines returns sunrise/sunset captions for two-line weather cells.
+func FormatSunLines(sunrise, sunset time.Time, ok bool) (upLine, downLine string) {
+	if !ok {
+		return "—", ""
+	}
+	return "↑" + padTimeWidth(formatClock(sunrise)), "↓" + padTimeWidth(formatClock(sunset))
+}
+
+func formatClock(t time.Time) string {
+	if t.IsZero() {
+		return "—"
+	}
+	return t.Format("3:04 PM")
+}
+
+const timeFieldWidth = 8
+
+func padTimeWidth(s string) string {
+	n := len([]rune(s))
+	if n >= timeFieldWidth {
+		return s
+	}
+	return strings.Repeat("\u2007", timeFieldWidth-n) + s
 }
 
 // FormatWind formats compass + speed + unit.
