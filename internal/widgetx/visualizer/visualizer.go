@@ -258,10 +258,12 @@ type surface struct {
 	baseTextSz float32
 	baseVizH   float32
 	baseIconGap float32
+	baseProgressGapX float32
 	iconSz     float32
 	textSz     float32
 	captionSz  float32
 	iconGap    float32
+	progressGapX float32
 
 	lastTitle    string
 	lastArtist   string
@@ -284,6 +286,7 @@ func newSurface() *surface {
 		iconSz:  defaultIconSize,
 		textSz:  defaultTextSize,
 		iconGap: 10,
+		baseProgressGapX: 12,
 		icon: &canvas.Text{
 			Text:      string(rune(defaultMusicIcon)),
 			Color:     colorWhite,
@@ -479,6 +482,10 @@ func (s *surface) applyStyle(cfg config.WidgetConfig) error {
 		s.baseVizH = defaultVizH
 	}
 	s.baseIconGap = 10
+	s.baseProgressGapX = cfg.GapX
+	if s.baseProgressGapX <= 0 {
+		s.baseProgressGapX = 12
+	}
 
 	iconFontPath := cfg.IconFont
 	if iconFontPath == "" {
@@ -547,6 +554,7 @@ func (s *surface) applyLayoutScale(size fyne.Size) {
 	s.captionSz = r.Px(s.baseTextSz*0.85, size)
 	s.vizH = r.Px(s.baseVizH, size)
 	s.iconGap = r.Px(s.baseIconGap, size)
+	s.progressGapX = r.Px(s.baseProgressGapX, size)
 
 	s.icon.TextSize = s.iconSz
 	s.title.TextSize = s.textSz
@@ -672,11 +680,9 @@ func (s *surface) layoutAll(size fyne.Size) {
 
 	textX := originX
 	textW := innerW
-	iconColW := float32(0)
 	if !s.icon.Hidden {
 		s.icon.Move(fyne.NewPos(originX, groupTop+(groupH-iconBox)/2))
 		s.icon.Resize(fyne.NewSize(iconW, iconBox))
-		iconColW = iconW
 
 		textX = originX + iconW + s.iconGap
 		textW = originX + innerW - textX
@@ -692,7 +698,7 @@ func (s *surface) layoutAll(size fyne.Size) {
 		s.artist.Resize(fyne.NewSize(textW, lineH))
 	}
 
-	s.layoutProgress(size, originX, iconColW, textX, textW)
+	s.layoutProgress(size, originX, innerW)
 }
 
 // fitEllipsis shortens s so it measures within maxW, appending "…".
@@ -726,11 +732,8 @@ func fitEllipsis(s string, size, maxW float32) string {
 	return string(runes[:lo]) + ell
 }
 
-func (s *surface) layoutProgress(size fyne.Size, iconX, iconColW, textX, textW float32) {
-	const (
-		progressH float32 = 2
-		timeGap   float32 = 8
-	)
+func (s *surface) layoutProgress(size fyne.Size, originX, innerW float32) {
+	const progressH float32 = 2
 	timeH := s.timeLeft.TextSize
 	if timeH < 9 {
 		timeH = 9
@@ -746,52 +749,60 @@ func (s *surface) layoutProgress(size fyne.Size, iconX, iconColW, textX, textW f
 	ty := py + (rowH-timeH)/2
 	by := py + (rowH-progressH)/2
 
+	gapX := s.progressGapX
+	if gapX < widgetx.RowGap {
+		gapX = widgetx.RowGap
+	}
+
 	showTimes := !s.timeLeft.Hidden
 	if !showTimes {
-		s.progressTrack.Move(fyne.NewPos(textX, by))
-		s.progressTrack.Resize(fyne.NewSize(textW, progressH))
-		fillW := float32(s.progress) * textW
+		s.progressTrack.Move(fyne.NewPos(originX, by))
+		s.progressTrack.Resize(fyne.NewSize(innerW, progressH))
+		fillW := float32(s.progress) * innerW
 		if fillW < 0 {
 			fillW = 0
 		}
-		s.progressFill.Move(fyne.NewPos(textX, by))
+		s.progressFill.Move(fyne.NewPos(originX, by))
 		s.progressFill.Resize(fyne.NewSize(fillW, progressH))
 		return
 	}
 
-	// Single row in the text column: elapsed | gap | bar | gap | remaining.
+	// Full-width 3-column row: elapsed | gapX | bar | gapX | remaining.
 	style := fyne.TextStyle{}
-	leftW := fyne.MeasureText(s.timeLeft.Text, timeH, style).Width + 2
-	rightW := fyne.MeasureText(s.timeTotal.Text, timeH, style).Width + 2
-	if leftW < 28 {
-		leftW = 28
+	leftW := fyne.MeasureText(s.timeLeft.Text, timeH, style).Width
+	rightW := fyne.MeasureText(s.timeTotal.Text, timeH, style).Width
+	sideColW := leftW
+	if rightW > sideColW {
+		sideColW = rightW
 	}
-	if rightW < 28 {
-		rightW = 28
+	const minSide float32 = 32
+	if sideColW < minSide {
+		sideColW = minSide
 	}
-	barW := textW - leftW - rightW - 2*timeGap
+
+	barW := innerW - 2*sideColW - 2*gapX
 	if barW < 24 {
 		barW = 24
-		overflow := leftW + rightW + 2*timeGap + barW - textW
+		overflow := 2*sideColW + 2*gapX + barW - innerW
 		if overflow > 0 {
-			shrink := overflow / 2
-			leftW -= shrink
-			rightW -= shrink
-			if leftW < 24 {
-				rightW -= 24 - leftW
-				leftW = 24
+			sideColW -= overflow / 2
+			if sideColW < minSide {
+				sideColW = minSide
 			}
-			if rightW < 24 {
-				leftW -= 24 - rightW
-				rightW = 24
-			}
+		}
+		barW = innerW - 2*sideColW - 2*gapX
+		if barW < 24 {
+			barW = 24
 		}
 	}
 
-	barX := textX + leftW + timeGap
-	s.timeLeft.Alignment = fyne.TextAlignLeading
-	s.timeLeft.Move(fyne.NewPos(textX, ty))
-	s.timeLeft.Resize(fyne.NewSize(leftW, timeH))
+	leftX := originX
+	barX := originX + sideColW + gapX
+	rightX := barX + barW + gapX
+
+	s.timeLeft.Alignment = fyne.TextAlignTrailing
+	s.timeLeft.Move(fyne.NewPos(leftX, ty))
+	s.timeLeft.Resize(fyne.NewSize(sideColW, timeH))
 
 	s.progressTrack.Move(fyne.NewPos(barX, by))
 	s.progressTrack.Resize(fyne.NewSize(barW, progressH))
@@ -802,10 +813,9 @@ func (s *surface) layoutProgress(size fyne.Size, iconX, iconColW, textX, textW f
 	s.progressFill.Move(fyne.NewPos(barX, by))
 	s.progressFill.Resize(fyne.NewSize(fillW, progressH))
 
-	remainX := barX + barW + timeGap
-	s.timeTotal.Alignment = fyne.TextAlignTrailing
-	s.timeTotal.Move(fyne.NewPos(remainX, ty))
-	s.timeTotal.Resize(fyne.NewSize(rightW, timeH))
+	s.timeTotal.Alignment = fyne.TextAlignLeading
+	s.timeTotal.Move(fyne.NewPos(rightX, ty))
+	s.timeTotal.Resize(fyne.NewSize(sideColW, timeH))
 }
 
 func (s *surface) CreateRenderer() fyne.WidgetRenderer {

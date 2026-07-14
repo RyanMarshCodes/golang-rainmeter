@@ -135,25 +135,54 @@ func driveLetter(label string) string {
 // FormatStorageLines returns used/total and % used for two-line metrics cells.
 // Offline disks: primary "—" (or "D —" when a drive letter is known), secondary "".
 func FormatStorageLines(label string, used, total uint64, ok bool) (primary, secondary string) {
-	letter := driveLetter(label)
-	if !ok {
-		if letter == "" {
+	drive, capacity, percent := FormatStorageStack(label, used, total, ok)
+	if capacity == "" && percent == "" {
+		if drive == "—" {
 			return "—", ""
 		}
-		return letter + " —", ""
+		return drive, ""
 	}
-	body := FormatBytesShort(used) + "/" + FormatBytesShort(total)
+	if percent == "" {
+		return drive + " " + capacity, ""
+	}
+	return drive + " " + capacity, percent
+}
+
+// FormatStorageStack returns drive label, used/total, and percent for three-line cells.
+func FormatStorageStack(label string, used, total uint64, ok bool) (drive, capacity, percent string) {
+	letter := driveLetter(label)
 	if letter != "" {
-		primary = letter + " " + body
-	} else {
-		primary = body
+		drive = letter + ":"
 	}
+	if !ok {
+		if drive == "" {
+			return "—", "", ""
+		}
+		return drive, "—", ""
+	}
+	if drive == "" {
+		drive = "—"
+	}
+	capacity = formatBytesSpaced(used) + " / " + formatBytesSpaced(total)
 	pct := 0.0
 	if total > 0 {
 		pct = float64(used) / float64(total) * 100
 	}
-	secondary = fmt.Sprintf("%.0f%%", pct)
-	return primary, secondary
+	percent = fmt.Sprintf("%.0f%%", pct)
+	return drive, capacity, percent
+}
+
+func formatBytesSpaced(n uint64) string {
+	s := FormatBytesShort(n)
+	runes := []rune(s)
+	if len(runes) < 2 {
+		return s
+	}
+	unit := runes[len(runes)-1]
+	if unit == 'G' || unit == 'T' || unit == 'M' || unit == 'B' {
+		return string(runes[:len(runes)-1]) + " " + string(unit)
+	}
+	return s
 }
 
 // FormatStorageLine keeps a single-line used/total (legacy / tests).

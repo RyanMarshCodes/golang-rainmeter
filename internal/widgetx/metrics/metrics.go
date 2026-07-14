@@ -111,6 +111,7 @@ func (m *Metrics) Apply(cfg config.WidgetConfig) error {
 		canvas.Refresh(c.icon)
 		canvas.Refresh(c.label)
 		canvas.Refresh(c.label2)
+		canvas.Refresh(c.label3)
 	}
 
 	m.requestPoll()
@@ -190,6 +191,7 @@ func (m *Metrics) pollOnce() {
 type measureLines struct {
 	primary   string
 	secondary string
+	tertiary  string
 }
 
 func formatMeasure(mc config.MeasureConfig) measureLines {
@@ -224,8 +226,8 @@ func formatMeasure(mc config.MeasureConfig) measureLines {
 			label = mc.Device
 		}
 		s := sysinfo.DiskUsage(mc.Device)
-		p, sec := sysinfo.FormatStorageLines(label, s.UsedBytes, s.TotalBytes, s.OK)
-		return measureLines{primary: p, secondary: sec}
+		drive, capacity, percent := sysinfo.FormatStorageStack(label, s.UsedBytes, s.TotalBytes, s.OK)
+		return measureLines{primary: drive, secondary: capacity, tertiary: percent}
 	case "network":
 		up, down, ok := sysinfo.NetworkRates()
 		p, sec := sysinfo.FormatNetworkLines(up, down, ok)
@@ -239,6 +241,7 @@ type measureCell struct {
 	icon     *canvas.Text
 	label    *canvas.Text
 	label2   *canvas.Text
+	label3   *canvas.Text
 	capacity bool // storage / inventory row
 }
 
@@ -345,6 +348,9 @@ func (s *gridSurface) applyStyle(cfg config.WidgetConfig) error {
 		s.cells[i].label2.Color = col
 		s.cells[i].label2.FontSource = labelRes
 		s.cells[i].label2.TextStyle = fyne.TextStyle{}
+		s.cells[i].label3.Color = col
+		s.cells[i].label3.FontSource = labelRes
+		s.cells[i].label3.TextStyle = fyne.TextStyle{}
 	}
 	s.applyLayoutScale(s.Size())
 	return nil
@@ -360,6 +366,7 @@ func (s *gridSurface) applyLayoutScale(size fyne.Size) {
 		s.cells[i].icon.TextSize = s.iconSz
 		s.cells[i].label.TextSize = s.textSz
 		s.cells[i].label2.TextSize = s.textSz
+		s.cells[i].label3.TextSize = s.textSz
 	}
 }
 
@@ -392,8 +399,15 @@ func (s *gridSurface) rebuild(measures []config.MeasureConfig) {
 				TextSize:  s.textSz,
 				Alignment: fyne.TextAlignCenter,
 			},
+			label3: &canvas.Text{
+				Text:      "",
+				Color:     s.fg,
+				TextSize:  s.textSz,
+				Alignment: fyne.TextAlignCenter,
+			},
 		}
 		s.cells[i].label2.Hide()
+		s.cells[i].label3.Hide()
 	}
 	s.Refresh()
 }
@@ -410,19 +424,11 @@ func (s *gridSurface) setLines(lines []measureLines) {
 			c.label.Text = lines[i].primary
 			changed = true
 		}
-		sec := lines[i].secondary
-		if sec == "" {
-			if !c.label2.Hidden || c.label2.Text != "" {
-				c.label2.Text = ""
-				c.label2.Hide()
-				changed = true
-			}
-		} else {
-			if c.label2.Hidden || c.label2.Text != sec {
-				c.label2.Text = sec
-				c.label2.Show()
-				changed = true
-			}
+		if setCaptionLine(&c.label2, lines[i].secondary) {
+			changed = true
+		}
+		if setCaptionLine(&c.label3, lines[i].tertiary) {
+			changed = true
 		}
 	}
 	if !changed {
@@ -433,7 +439,25 @@ func (s *gridSurface) setLines(lines []measureLines) {
 		canvas.Refresh(c.icon)
 		canvas.Refresh(c.label)
 		canvas.Refresh(c.label2)
+		canvas.Refresh(c.label3)
 	}
+}
+
+func setCaptionLine(t **canvas.Text, text string) bool {
+	if text == "" {
+		if !(*t).Hidden || (*t).Text != "" {
+			(*t).Text = ""
+			(*t).Hide()
+			return true
+		}
+		return false
+	}
+	if (*t).Hidden || (*t).Text != text {
+		(*t).Text = text
+		(*t).Show()
+		return true
+	}
+	return false
 }
 
 func (s *gridSurface) layoutCells(size fyne.Size) {
@@ -507,6 +531,9 @@ func (s *gridSurface) cellStackH(c *measureCell) float32 {
 	if !c.label2.Hidden && c.label2.Text != "" {
 		stackH += lineGap + labelH
 	}
+	if !c.label3.Hidden && c.label3.Text != "" {
+		stackH += lineGap + labelH
+	}
 	return stackH
 }
 
@@ -567,9 +594,11 @@ func (s *gridSurface) layoutCellGroup(idxs []int, pad, originY, innerW, bandH fl
 			c.icon.Alignment = fyne.TextAlignCenter
 			c.label.Alignment = fyne.TextAlignCenter
 			c.label2.Alignment = fyne.TextAlignCenter
+			c.label3.Alignment = fyne.TextAlignCenter
 			c.icon.TextSize = s.iconSz
 			c.label.TextSize = s.textSz
 			c.label2.TextSize = s.textSz
+			c.label3.TextSize = s.textSz
 			iconH := s.iconSz
 			labelH := s.textSz + 2
 			const lineGap float32 = 1
@@ -579,12 +608,23 @@ func (s *gridSurface) layoutCellGroup(idxs []int, pad, originY, innerW, bandH fl
 			ly := top + iconH + stackGap
 			c.label.Move(fyne.NewPos(x, ly))
 			c.label.Resize(fyne.NewSize(cellW, labelH))
+			nextY := ly + labelH
 			if !c.label2.Hidden && c.label2.Text != "" {
-				c.label2.Move(fyne.NewPos(x, ly+labelH+lineGap))
+				nextY += lineGap
+				c.label2.Move(fyne.NewPos(x, nextY))
 				c.label2.Resize(fyne.NewSize(cellW, labelH))
+				nextY += labelH
 			} else {
 				c.label2.Move(fyne.NewPos(x, ly))
 				c.label2.Resize(fyne.NewSize(cellW, 0))
+			}
+			if !c.label3.Hidden && c.label3.Text != "" {
+				nextY += lineGap
+				c.label3.Move(fyne.NewPos(x, nextY))
+				c.label3.Resize(fyne.NewSize(cellW, labelH))
+			} else {
+				c.label3.Move(fyne.NewPos(x, ly))
+				c.label3.Resize(fyne.NewSize(cellW, 0))
 			}
 		}
 	}
@@ -609,14 +649,14 @@ func (r *gridRenderer) MinSize() fyne.Size { return r.surface.MinSize() }
 
 func (r *gridRenderer) Objects() []fyne.CanvasObject {
 	s := r.surface
-	need := 1 + len(s.cells)*3
+	need := 1 + len(s.cells)*4
 	if cap(r.objs) < need {
 		r.objs = make([]fyne.CanvasObject, 0, need)
 	}
 	r.objs = r.objs[:0]
 	r.objs = append(r.objs, s.rootBG)
 	for _, c := range s.cells {
-		r.objs = append(r.objs, c.icon, c.label, c.label2)
+		r.objs = append(r.objs, c.icon, c.label, c.label2, c.label3)
 	}
 	return r.objs
 }
@@ -634,6 +674,7 @@ func (r *gridRenderer) Refresh() {
 		c.icon.Refresh()
 		c.label.Refresh()
 		c.label2.Refresh()
+		c.label3.Refresh()
 	}
 }
 

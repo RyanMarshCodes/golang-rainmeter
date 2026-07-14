@@ -31,12 +31,32 @@ func TestFormatStorageLines(t *testing.T) {
 	used := uint64(200) * 1024 * 1024 * 1024
 	total := uint64(1024) * 1024 * 1024 * 1024
 	p, s := FormatStorageLines("C:", used, total, true)
-	if p != "C 200G/1T" || s != "20%" {
+	if p != "C: 200 G / 1 T" || s != "20%" {
 		t.Fatalf("storage lines: %q %q", p, s)
 	}
 	p, s = FormatStorageLines("D:", 0, 0, false)
-	if p != "D —" || s != "" {
+	if p != "D: —" || s != "" {
 		t.Fatalf("offline: %q %q", p, s)
+	}
+}
+
+func TestFormatStorageStack(t *testing.T) {
+	const gb = 1024 * 1024 * 1024
+	used := uint64(3237) * gb / 10
+	total := uint64(19) * gb * 1024 / 10
+	drive, capacity, percent := FormatStorageStack("C:", used, total, true)
+	if drive != "C:" {
+		t.Fatalf("drive: %q", drive)
+	}
+	if capacity != "323.7 G / 1.9 T" {
+		t.Fatalf("capacity: %q", capacity)
+	}
+	if percent == "" {
+		t.Fatal("expected percent")
+	}
+	drive, capacity, percent = FormatStorageStack("E:", 0, 0, false)
+	if drive != "E:" || capacity != "—" || percent != "" {
+		t.Fatalf("offline stack: %q %q %q", drive, capacity, percent)
 	}
 }
 

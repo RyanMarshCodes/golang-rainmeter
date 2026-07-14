@@ -515,11 +515,11 @@ func (s *surface) applyStyle(cfg config.WidgetConfig) error {
 	s.condition.FontSource = labelRes
 	s.condition.TextStyle = fyne.TextStyle{}
 
-	s.sunUp.Color = col
+	s.sunUp.Color = s.dim
 	s.sunUp.FontSource = labelRes
 	s.sunUp.TextStyle = fyne.TextStyle{}
 	s.sunUp.Alignment = fyne.TextAlignCenter
-	s.sunDown.Color = col
+	s.sunDown.Color = s.dim
 	s.sunDown.FontSource = labelRes
 	s.sunDown.TextStyle = fyne.TextStyle{}
 	s.sunDown.Alignment = fyne.TextAlignCenter
@@ -531,6 +531,7 @@ func (s *surface) applyStyle(cfg config.WidgetConfig) error {
 		s.detailVal[i].Color = col
 		s.detailVal[i].FontSource = labelRes
 		s.detailVal[i].TextStyle = fyne.TextStyle{}
+		s.detailVal[i].Alignment = fyne.TextAlignCenter
 	}
 	s.status.FontSource = labelRes
 	s.status.TextStyle = fyne.TextStyle{}
@@ -616,21 +617,45 @@ func (s *surface) layoutAll(size fyne.Size) {
 	contentTop := originY + widgetx.PadY
 	rowH := splitY - contentTop - 2
 
-	colW := innerW / float32(forecastDays)
+	const topCols = 3
+	topColW := innerW / float32(topCols)
 	const stackGap float32 = 2
 
-	// Column 0: weather icon
-	iconH := s.iconSz + 4
+	// Column 0: weather icon + sunrise/sunset
 	col0X := pad
+	iconH := s.iconSz + 4
+	sunLineH := s.textSz + 2
+	const sunLineGap float32 = 1
+	const iconSunGap float32 = 4
+
+	hasSun := !s.sunUp.Hidden
+	col0StackH := iconH
+	if hasSun {
+		col0StackH += iconSunGap + sunLineH + sunLineGap + sunLineH
+	}
+	col0Top := contentTop + (rowH-col0StackH)/2
+	if col0Top < contentTop {
+		col0Top = contentTop
+	}
+
 	s.bigIcon.Alignment = fyne.TextAlignCenter
-	s.bigIcon.Move(fyne.NewPos(col0X, contentTop+(rowH-iconH)/2))
-	s.bigIcon.Resize(fyne.NewSize(colW, iconH))
+	s.bigIcon.Move(fyne.NewPos(col0X, col0Top))
+	s.bigIcon.Resize(fyne.NewSize(topColW, iconH))
+	if hasSun {
+		sunTop := col0Top + iconH + iconSunGap
+		s.sunUp.Alignment = fyne.TextAlignCenter
+		s.sunUp.Move(fyne.NewPos(col0X, sunTop))
+		s.sunUp.Resize(fyne.NewSize(topColW, sunLineH))
+		s.sunDown.Alignment = fyne.TextAlignCenter
+		s.sunDown.Move(fyne.NewPos(col0X, sunTop+sunLineH+sunLineGap))
+		s.sunDown.Resize(fyne.NewSize(topColW, sunLineH))
+	}
 
 	// Column 1: current temp + high/low + condition
-	col1X := pad + colW
+	col1X := pad + topColW
 	rangeH := s.textSz + 2
-	stackH := s.tempSz + stackGap + rangeH + stackGap + s.textSz
-	stackTop := contentTop + (rowH-stackH)/2
+	tempStackH := s.tempSz + stackGap + rangeH + stackGap + s.textSz
+	stackTop := contentTop + (rowH-tempStackH)/2
 	if stackTop < contentTop {
 		stackTop = contentTop
 	}
@@ -638,40 +663,31 @@ func (s *surface) layoutAll(size fyne.Size) {
 	s.todayRange.Alignment = fyne.TextAlignCenter
 	s.condition.Alignment = fyne.TextAlignCenter
 	s.temp.Move(fyne.NewPos(col1X, stackTop))
-	s.temp.Resize(fyne.NewSize(colW, s.tempSz+2))
+	s.temp.Resize(fyne.NewSize(topColW, s.tempSz+2))
 	rangeY := stackTop + s.tempSz + stackGap
 	s.todayRange.Move(fyne.NewPos(col1X, rangeY))
-	s.todayRange.Resize(fyne.NewSize(colW, rangeH))
+	s.todayRange.Resize(fyne.NewSize(topColW, rangeH))
 	s.condition.Move(fyne.NewPos(col1X, rangeY+rangeH+stackGap))
-	s.condition.Resize(fyne.NewSize(colW, s.textSz+2))
+	s.condition.Resize(fyne.NewSize(topColW, s.textSz+2))
 
-	// Column 2: sunrise / sunset
-	col2X := pad + 2*colW
-	sunLineH := s.textSz + 2
-	const sunGap float32 = 1
-	sunBlockH := sunLineH + sunGap + sunLineH
-	sunTop := contentTop + (rowH-sunBlockH)/2
-	s.sunUp.Move(fyne.NewPos(col2X, sunTop))
-	s.sunUp.Resize(fyne.NewSize(colW, sunLineH))
-	s.sunDown.Move(fyne.NewPos(col2X, sunTop+sunLineH+sunGap))
-	s.sunDown.Resize(fyne.NewSize(colW, sunLineH))
-
-	// Column 3: feels like / humidity / wind (trailing-aligned in column)
-	col3X := pad + 3*colW
+	// Column 2: feels like / humidity / wind (centered; right inset matches left pad)
+	col2X := pad + 2*topColW
 	lineH := s.textSz + 4
 	detailBlockH := lineH * 3
 	detailStartY := contentTop + (rowH-detailBlockH)/2
 	for i := 0; i < 3; i++ {
 		y := detailStartY + float32(i)*lineH
-		s.detailVal[i].Alignment = fyne.TextAlignTrailing
-		s.detailVal[i].Move(fyne.NewPos(col3X, y))
-		s.detailVal[i].Resize(fyne.NewSize(colW, lineH))
+		s.detailVal[i].Alignment = fyne.TextAlignCenter
+		s.detailVal[i].Move(fyne.NewPos(col2X, y))
+		s.detailVal[i].Resize(fyne.NewSize(topColW, lineH))
 	}
 
+	// Forecast row: 4 equal columns across padded inner width
+	forecastColW := innerW / float32(forecastDays)
 	botTop := splitY + widgetx.RowGap/2
 	botH := originY + usableH - botTop - widgetx.PadY
 	for i := 0; i < forecastDays; i++ {
-		x := pad + float32(i)*colW
+		x := pad + float32(i)*forecastColW
 		dayIconH := s.days[i].icon.TextSize + 2
 		tempsH := s.textSz + 2
 		nameH := s.textSz + 2
@@ -682,11 +698,11 @@ func (s *surface) layoutAll(size fyne.Size) {
 			blockTop = botTop
 		}
 		s.days[i].icon.Move(fyne.NewPos(x, blockTop))
-		s.days[i].icon.Resize(fyne.NewSize(colW, dayIconH))
+		s.days[i].icon.Resize(fyne.NewSize(forecastColW, dayIconH))
 		s.days[i].temps.Move(fyne.NewPos(x, blockTop+dayIconH+fGap))
-		s.days[i].temps.Resize(fyne.NewSize(colW, tempsH))
+		s.days[i].temps.Resize(fyne.NewSize(forecastColW, tempsH))
 		s.days[i].name.Move(fyne.NewPos(x, blockTop+dayIconH+fGap+tempsH+fGap))
-		s.days[i].name.Resize(fyne.NewSize(colW, nameH))
+		s.days[i].name.Resize(fyne.NewSize(forecastColW, nameH))
 	}
 
 	// Subtle bottom hairline separating weather from the next widget.
