@@ -1,0 +1,38 @@
+# Binaries / build
+*.exe
+*.dll
+*.test
+/rmgo
+/dist/
+/bin/
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*~
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Local machine config (copy from config.example.yml)
+config/config.yml
+
+# Proprietary / local icon fonts — keep map + docs, drop binaries
+assets/fonts/fontawesome/
+assets/fonts/icons/*.otf
+assets/fonts/icons/*.ttf
+assets/fonts/icons/*.woff*
+
+# Optional local overrides
+*.local.yml
+.env
+.env.*
+
+# Secrets / credentials (belt-and-suspenders)
+*.pem
+*.key
+credentials.json
+secrets.*

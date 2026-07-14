@@ -1,0 +1,40 @@
+{
+  "note": "Logical name → Unicode codepoint (hex). Pair with any icon font via icon_font in config. Defaults match Font Awesome Free Solid codepoints for common glyphs; swap hex values to match your font.",
+  "icons": {
+    "music": "f001",
+    "headphones": "f025",
+    "compact-disc": "f51f",
+
+    "sun": "f185",
+    "cloud": "f0c2",
+    "cloud-sun": "f6c4",
+    "cloud-rain": "f73d",
+    "cloud-showers-heavy": "f740",
+    "cloud-bolt": "f76c",
+    "snowflake": "f2dc",
+    "smog": "f75f",
+    "fog": "f75f",
+
+    "computer": "e4e5",
+    "desktop": "f390",
+    "display": "f390",
+    "microchip": "f2db",
+    "cpu": "f2db",
+    "gpu": "f2db",
+    "memory": "f538",
+    "hard-drive": "f0a0",
+    "hdd": "f0a0",
+    "server": "f233",
+
+    "router": "f1eb",
+    "network": "f1eb",
+    "wifi": "f1eb",
+    "network-wired": "f6ff",
+    "ethernet": "f796",
+
+    "gauge": "f624",
+    "gauge-high": "f625",
+    "chart-simple": "e473",
+    "temperature-half": "f2c9"
+  }
+}

@@ -1,0 +1,97 @@
+# Copy to config.yml (gitignored) and customize.
+# First run also auto-copies this file if config.yml is missing.
+
+icon_map: fonts/icons/icon-map.json
+
+shell:
+  x: 80
+  y: 80
+  width: 420
+  height: 780
+  gap: 12
+  order:
+    - main-visualizer
+    - main-clock
+    - main-weather
+    - sys-metrics
+  transparent: true
+  click_through: true
+
+widgets:
+  - id: main-visualizer
+    type: visualizer
+    enabled: true
+    title: Visualizer
+    weekday_font: fonts/montserrat/static/Montserrat-SemiBold.ttf
+    visualizer_bars: 48
+    visualizer_color: "#FFFFFF"
+    visualizer_height: 36
+    color: "#FFFFFF"
+    # Drop any icon font here (e.g. Font Awesome Free Solid) — see assets/fonts/icons/README.md
+    icon_font: fonts/icons/fa-solid.otf
+    label_font: fonts/montserrat/static/Montserrat-Medium.ttf
+    icon_size: 25
+    text_size: 16
+    music_icon: music
+    # Optional: pin to known SMTC AppIDs (see log: media: SMTC source "…")
+    media_apps: []
+    height: 110
+
+  - id: main-clock
+    type: clock
+    enabled: true
+    title: Clock
+    format: 3:04 PM | Jan 2
+    weekday_font: fonts/montserrat/static/Montserrat-SemiBold.ttf
+    detail_font: fonts/montserrat/static/Montserrat-Medium.ttf
+    time_color: "#FFFFFF"
+    date_color: "#141414"
+    rule_color: "#FFFFFF"
+    height: 160
+
+  - id: main-weather
+    type: weather
+    enabled: true
+    title: Weather
+    weekday_font: fonts/montserrat/static/Montserrat-SemiBold.ttf
+    color: "#FFFFFF"
+    icon_font: fonts/icons/fa-solid.otf
+    label_font: fonts/montserrat/static/Montserrat-Medium.ttf
+    icon_size: 56
+    text_size: 15
+    interval_ms: 600000
+    place: Toronto # city name, or US ZIP (e.g. "10001")
+    units: f
+    accent_color: "#7EC8E3"
+    height: 210
+
+  - id: sys-metrics
+    type: metrics
+    enabled: true
+    title: Metrics
+    color: "#FFFFFF"
+    icon_font: fonts/icons/fa-solid.otf
+    label_font: fonts/montserrat/static/Montserrat-Medium.ttf
+    icon_size: 30
+    text_size: 15
+    columns: 4
+    gap_x: 12
+    gap_y: 10
+    interval_ms: 1000
+    measures:
+      - kind: cpu
+        icon: computer
+        label: CPU
+      - kind: gpu
+        icon: gpu
+        label: GPU
+      - kind: memory
+        icon: memory
+        label: RAM
+      - kind: network
+        icon: wifi
+      - kind: storage
+        icon: hard-drive
+        label: System
+        device: "C:\\"
+    height: 160
