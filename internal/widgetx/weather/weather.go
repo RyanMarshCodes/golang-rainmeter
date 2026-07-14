@@ -198,9 +198,10 @@ type surface struct {
 	accent *canvas.Rectangle
 	rule   *canvas.Rectangle
 
-	bigIcon   *canvas.Text
-	temp      *canvas.Text
-	condition *canvas.Text
+	bigIcon    *canvas.Text
+	temp       *canvas.Text
+	todayRange *canvas.Text
+	condition  *canvas.Text
 	detailKey [3]*canvas.Text
 	detailVal [3]*canvas.Text
 	status    *canvas.Text
@@ -235,6 +236,11 @@ func newSurface() *surface {
 			Color:     colorWhite,
 			TextSize:  36,
 			Alignment: fyne.TextAlignLeading,
+		},
+		todayRange: &canvas.Text{
+			Color:     colorWhite,
+			TextSize:  11,
+			Alignment: fyne.TextAlignCenter,
 		},
 		condition: &canvas.Text{
 			Color:     colorWhite,
@@ -299,6 +305,7 @@ func (s *surface) setSnapshot(snap wx.Snapshot, metric bool) {
 		s.status.Show()
 		s.bigIcon.Hide()
 		s.temp.Hide()
+		s.todayRange.Hide()
 		s.condition.Hide()
 		for i := 0; i < 3; i++ {
 			s.detailKey[i].Hide()
@@ -317,6 +324,7 @@ func (s *surface) setSnapshot(snap wx.Snapshot, metric bool) {
 	s.status.Hide()
 	s.bigIcon.Show()
 	s.temp.Show()
+	s.todayRange.Show()
 	s.condition.Show()
 	for i := 0; i < 3; i++ {
 		s.detailKey[i].Show()
@@ -325,6 +333,13 @@ func (s *surface) setSnapshot(snap wx.Snapshot, metric bool) {
 
 	s.bigIcon.Text = string(icons.Rune(snap.Current.Icon, ""))
 	s.temp.Text = wx.FormatTemp(snap.Current.TempC)
+	if len(snap.Forecast) > 0 {
+		today := snap.Forecast[0]
+		s.todayRange.Text = wx.FormatRange(today.HighC, today.LowC)
+		s.todayRange.Show()
+	} else {
+		s.todayRange.Hide()
+	}
 	s.condition.Text = snap.Current.Label
 	s.detailVal[0].Text = wx.FormatTemp(snap.Current.FeelsC)
 	s.detailVal[1].Text = fmt.Sprintf("%d%%", snap.Current.Humidity)
@@ -356,6 +371,7 @@ func (s *surface) refreshAll() {
 	canvas.Refresh(s.rule)
 	canvas.Refresh(s.bigIcon)
 	canvas.Refresh(s.temp)
+	canvas.Refresh(s.todayRange)
 	canvas.Refresh(s.condition)
 	canvas.Refresh(s.status)
 	for i := 0; i < 3; i++ {
@@ -451,6 +467,12 @@ func (s *surface) applyStyle(cfg config.WidgetConfig) error {
 	s.temp.TextSize = s.tempSz
 	s.temp.FontSource = boldRes
 
+	s.todayRange.Color = col
+	s.todayRange.TextSize = forecastSz
+	s.todayRange.FontSource = labelRes
+	s.todayRange.TextStyle = fyne.TextStyle{}
+	s.todayRange.Alignment = fyne.TextAlignCenter
+
 	s.condition.Color = s.dim
 	s.condition.TextSize = detailSz
 	s.condition.FontSource = labelRes
@@ -527,80 +549,53 @@ func (s *surface) layoutAll(size fyne.Size) {
 	contentTop := originY + widgetx.PadY
 	rowH := splitY - contentTop - 2
 
-	detailW := float32(132)
-	if innerW < 300 {
-		detailW = 110
-	}
-
-	iconW := s.iconSz + 8
-	iconH := s.iconSz + 4
-	const minIconTextGap float32 = 14
+	colW := innerW / float32(forecastDays)
 	const stackGap float32 = 2
-	tempMin := s.temp.MinSize()
-	condMin := s.condition.MinSize()
-	textColW := tempMin.Width
-	if condMin.Width > textColW {
-		textColW = condMin.Width
-	}
-	if textColW < 48 {
-		textColW = 48
-	}
-	detailX := pad + innerW - detailW
-	// Leave a gutter before the detail column, then center temp/condition
-	// in the remaining span so icon + big weather fill the mid gap.
-	const midGutter float32 = 16
-	midLeft := pad + iconW
-	midRight := detailX - midGutter
-	midW := midRight - midLeft
-	if midW < textColW+minIconTextGap {
-		midW = textColW + minIconTextGap
-	}
-	if textColW > midW-minIconTextGap && midW-minIconTextGap > 40 {
-		textColW = midW - minIconTextGap
-	}
+
+	// Column 0: weather icon
+	iconH := s.iconSz + 4
+	col0X := pad
+	s.bigIcon.Alignment = fyne.TextAlignCenter
+	s.bigIcon.Move(fyne.NewPos(col0X, contentTop+(rowH-iconH)/2))
+	s.bigIcon.Resize(fyne.NewSize(colW, iconH))
+
+	// Column 1: current temp + condition
+	col1X := pad + colW
 	stackH := s.tempSz + stackGap + s.textSz
-	groupH := stackH
-	if iconH > groupH {
-		groupH = iconH
+	stackTop := contentTop + (rowH-stackH)/2
+	if stackTop < contentTop {
+		stackTop = contentTop
 	}
-	groupTop := contentTop + (rowH-groupH)/2
-	if groupTop < contentTop {
-		groupTop = contentTop
-	}
-	groupLeft := pad
+	s.temp.Alignment = fyne.TextAlignCenter
+	s.condition.Alignment = fyne.TextAlignCenter
+	s.temp.Move(fyne.NewPos(col1X, stackTop))
+	s.temp.Resize(fyne.NewSize(colW, s.tempSz+2))
+	s.condition.Move(fyne.NewPos(col1X, stackTop+s.tempSz+stackGap))
+	s.condition.Resize(fyne.NewSize(colW, s.textSz+2))
 
-	s.bigIcon.Move(fyne.NewPos(groupLeft, groupTop+(groupH-iconH)/2))
-	s.bigIcon.Resize(fyne.NewSize(iconW, iconH))
+	// Column 2: today's high / low
+	col2X := pad + 2*colW
+	rangeH := s.textSz + 2
+	s.todayRange.Alignment = fyne.TextAlignCenter
+	s.todayRange.Move(fyne.NewPos(col2X, contentTop+(rowH-rangeH)/2))
+	s.todayRange.Resize(fyne.NewSize(colW, rangeH))
 
-	// Bias toward a comfortable gap; when extra room remains, park the
-	// stack near the middle of icon→details rather than hugging the icon.
-	textX := midLeft + (midW-textColW)/2
-	if textX < midLeft+minIconTextGap {
-		textX = midLeft + minIconTextGap
-	}
-	stackTop := groupTop + (groupH-stackH)/2
-	s.temp.Alignment = fyne.TextAlignLeading
-	s.condition.Alignment = fyne.TextAlignLeading
-	s.temp.Move(fyne.NewPos(textX, stackTop))
-	s.temp.Resize(fyne.NewSize(textColW, s.tempSz+2))
-	s.condition.Move(fyne.NewPos(textX, stackTop+s.tempSz+stackGap))
-	s.condition.Resize(fyne.NewSize(textColW, s.textSz+2))
-
+	// Column 3: feels like / humidity / wind
+	col3X := pad + 3*colW
 	lineH := s.textSz + 4
 	detailBlockH := lineH * 3
 	detailStartY := contentTop + (rowH-detailBlockH)/2
+	keyW := colW * 0.58
 	for i := 0; i < 3; i++ {
 		y := detailStartY + float32(i)*lineH
-		keyW := detailW * 0.58
-		s.detailKey[i].Move(fyne.NewPos(detailX, y))
+		s.detailKey[i].Move(fyne.NewPos(col3X, y))
 		s.detailKey[i].Resize(fyne.NewSize(keyW, lineH))
-		s.detailVal[i].Move(fyne.NewPos(detailX+keyW, y))
-		s.detailVal[i].Resize(fyne.NewSize(detailW-keyW, lineH))
+		s.detailVal[i].Move(fyne.NewPos(col3X+keyW, y))
+		s.detailVal[i].Resize(fyne.NewSize(colW-keyW, lineH))
 	}
 
 	botTop := splitY + widgetx.RowGap/2
 	botH := originY + usableH - botTop - widgetx.PadY
-	colW := innerW / float32(forecastDays)
 	for i := 0; i < forecastDays; i++ {
 		x := pad + float32(i)*colW
 		dayIconH := s.days[i].icon.TextSize + 2
@@ -642,7 +637,7 @@ func (r *renderer) Objects() []fyne.CanvasObject {
 	s := r.surface
 	objs := []fyne.CanvasObject{
 		s.rootBG, s.panel, s.accent, s.rule,
-		s.bigIcon, s.temp, s.condition, s.status,
+		s.bigIcon, s.temp, s.todayRange, s.condition, s.status,
 	}
 	for i := 0; i < 3; i++ {
 		objs = append(objs, s.detailKey[i], s.detailVal[i])
