@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"testing"
 
-	"ryanmarsh.net/rmgo/internal/icons"
+	"github.com/RyanMarshCodes/golang-rainmeter/internal/icons"
 )
 
 func TestMain(m *testing.M) {

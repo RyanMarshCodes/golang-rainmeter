@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	rmapp "ryanmarsh.net/rmgo/internal/app"
+	rmapp "github.com/RyanMarshCodes/golang-rainmeter/internal/app"
 )
 
 func main() {

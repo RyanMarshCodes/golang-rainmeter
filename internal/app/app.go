@@ -11,13 +11,13 @@ import (
 	fyneapp "fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/driver/desktop"
 
-	"ryanmarsh.net/rmgo/internal/config"
-	"ryanmarsh.net/rmgo/internal/widgetx"
-	_ "ryanmarsh.net/rmgo/internal/widgetx/clock"      // register clock
-	_ "ryanmarsh.net/rmgo/internal/widgetx/metrics"    // register metrics
-	_ "ryanmarsh.net/rmgo/internal/widgetx/visualizer" // register visualizer
-	_ "ryanmarsh.net/rmgo/internal/widgetx/weather"    // register weather
-	"ryanmarsh.net/rmgo/internal/winutil"
+	"github.com/RyanMarshCodes/golang-rainmeter/internal/config"
+	"github.com/RyanMarshCodes/golang-rainmeter/internal/widgetx"
+	_ "github.com/RyanMarshCodes/golang-rainmeter/internal/widgetx/clock"      // register clock
+	_ "github.com/RyanMarshCodes/golang-rainmeter/internal/widgetx/metrics"    // register metrics
+	_ "github.com/RyanMarshCodes/golang-rainmeter/internal/widgetx/visualizer" // register visualizer
+	_ "github.com/RyanMarshCodes/golang-rainmeter/internal/widgetx/weather"    // register weather
+	"github.com/RyanMarshCodes/golang-rainmeter/internal/winutil"
 )
 
 // App is the tray-hosted shell around the widget manager.
@@ -44,7 +44,7 @@ func Run(configPath string) error {
 		configPath = defaultConfigPath()
 	}
 	a := &App{
-		fyne:     fyneapp.NewWithID("ryanmarsh.net.rmgo"),
+		fyne:     fyneapp.NewWithID("com.github.RyanMarshCodes.golang-rainmeter"),
 		store:    config.NewStore(configPath),
 		lastGeom: map[string]geom{},
 	}

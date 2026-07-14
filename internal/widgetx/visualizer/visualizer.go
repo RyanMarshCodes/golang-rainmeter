@@ -13,12 +13,12 @@ import (
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/widget"
 
-	"ryanmarsh.net/rmgo/internal/audio"
-	"ryanmarsh.net/rmgo/internal/config"
-	"ryanmarsh.net/rmgo/internal/icons"
-	"ryanmarsh.net/rmgo/internal/media"
-	"ryanmarsh.net/rmgo/internal/widgetx"
-	"ryanmarsh.net/rmgo/internal/winutil"
+	"github.com/RyanMarshCodes/golang-rainmeter/internal/audio"
+	"github.com/RyanMarshCodes/golang-rainmeter/internal/config"
+	"github.com/RyanMarshCodes/golang-rainmeter/internal/icons"
+	"github.com/RyanMarshCodes/golang-rainmeter/internal/media"
+	"github.com/RyanMarshCodes/golang-rainmeter/internal/widgetx"
+	"github.com/RyanMarshCodes/golang-rainmeter/internal/winutil"
 )
 
 func init() {

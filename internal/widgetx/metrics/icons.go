@@ -1,6 +1,6 @@
 package metrics
 
-import "ryanmarsh.net/rmgo/internal/icons"
+import "github.com/RyanMarshCodes/golang-rainmeter/internal/icons"
 
 // IconRune resolves a glyph from icon name and/or hex icon_code via the
 // shared icon map (see assets/fonts/icons/icon-map.json).

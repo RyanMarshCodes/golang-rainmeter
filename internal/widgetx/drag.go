@@ -4,7 +4,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/driver/desktop"
 
-	"ryanmarsh.net/rmgo/internal/winutil"
+	"github.com/RyanMarshCodes/golang-rainmeter/internal/winutil"
 )
 
 // Drag tracks edit-mode window dragging for a splash surface.

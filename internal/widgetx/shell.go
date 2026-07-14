@@ -9,8 +9,8 @@ import (
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/widget"
 
-	"ryanmarsh.net/rmgo/internal/config"
-	"ryanmarsh.net/rmgo/internal/winutil"
+	"github.com/RyanMarshCodes/golang-rainmeter/internal/config"
+	"github.com/RyanMarshCodes/golang-rainmeter/internal/winutil"
 )
 
 // Shell is the single splash window that stacks widget panels.

@@ -2,7 +2,7 @@
 
 Windows desktop overlay inspired by Rainmeter. One transparent Fyne splash window stacks widgets (audio visualizer + SMTC now-playing, clock, weather via Open-Meteo, system metrics). A system tray controls show/hide, per-widget toggles, and edit mode for positioning.
 
-**Platform:** Windows 10/11 only for full features (WASAPI visualizer, SMTC media, layered / click-through windows). Module: `ryanmarsh.net/rmgo`.
+**Platform:** Windows 10/11 only for full features (WASAPI visualizer, SMTC media, layered / click-through windows). Module: `github.com/RyanMarshCodes/golang-rainmeter`.
 
 ## Table of contents
 
@@ -27,8 +27,8 @@ For installing Go and a C compiler on Windows (and a minimal Fyne sanity check),
 ## Clone and run
 
 ```powershell
-git clone https://github.com/ryanmarsh/rmgo.git
-cd rmgo
+git clone https://github.com/RyanMarshCodes/golang-rainmeter.git
+cd golang-rainmeter
 
 # Optional: seed local config (first run also auto-copies if missing)
 Copy-Item config\config.example.yml config\config.yml

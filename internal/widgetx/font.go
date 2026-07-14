@@ -7,7 +7,7 @@ import (
 
 	"fyne.io/fyne/v2"
 
-	"ryanmarsh.net/rmgo/internal/config"
+	"github.com/RyanMarshCodes/golang-rainmeter/internal/config"
 )
 
 var fontCache sync.Map // abs path → fyne.Resource

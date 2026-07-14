@@ -1,4 +1,4 @@
-module ryanmarsh.net/rmgo
+module github.com/RyanMarshCodes/golang-rainmeter
 
 go 1.26.5
 

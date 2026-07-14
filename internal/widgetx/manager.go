@@ -8,8 +8,8 @@ import (
 
 	"fyne.io/fyne/v2"
 
-	"ryanmarsh.net/rmgo/internal/config"
-	"ryanmarsh.net/rmgo/internal/icons"
+	"github.com/RyanMarshCodes/golang-rainmeter/internal/config"
+	"github.com/RyanMarshCodes/golang-rainmeter/internal/icons"
 )
 
 // Instance is a widget panel hosted inside the shell.
